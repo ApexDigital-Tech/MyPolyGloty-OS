@@ -39,6 +39,8 @@ export class TtsService {
   /**
    * Inicializa el AudioContext y el AnalyserNode para el avatar.
    */
+  private currentUtterance: SpeechSynthesisUtterance | null = null;
+
   public initialize(sharedContext?: AudioContext): void {
     if (this.audioContext && this.analyserNode) return;
 
@@ -48,6 +50,60 @@ export class TtsService {
     this.analyserNode.fftSize = 256;
     this.analyserNode.smoothingTimeConstant = 0.8;
     this.analyserNode.connect(this.audioContext.destination);
+
+    // Evitar advertencia TS
+    if (this.currentUtterance) {
+      this.currentUtterance.rate = 1.0;
+    }
+  }
+
+  /**
+   * Sintetiza y pronuncia texto usando la voz humana del navegador (Web Speech Synthesis).
+   * Selecciona prioritariamente voces británicas o americanas naturales para el tutor.
+   */
+  public async speakText(text: string, lang = 'en-GB'): Promise<void> {
+    if (typeof window === 'undefined' || !window.speechSynthesis) return;
+
+    this.abortPlayback();
+
+    return new Promise((resolve) => {
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = lang;
+      utterance.rate = 0.95; // Cadencia natural de tutor
+      utterance.pitch = 1.0;
+
+      // Buscar voz adecuada en inglés
+      const voices = window.speechSynthesis.getVoices();
+      const preferredVoice = voices.find(
+        (v) => (v.lang.startsWith('en-GB') || v.lang.startsWith('en-US')) && !v.name.includes('Google')
+      ) || voices.find((v) => v.lang.startsWith('en')) || voices[0];
+
+      if (preferredVoice) {
+        utterance.voice = preferredVoice;
+      }
+
+      utterance.onstart = () => {
+        this.isPlaying = true;
+        if (this.onPlaybackStateChange) this.onPlaybackStateChange(true);
+      };
+
+      utterance.onend = () => {
+        this.isPlaying = false;
+        this.currentUtterance = null;
+        if (this.onPlaybackStateChange) this.onPlaybackStateChange(false);
+        resolve();
+      };
+
+      utterance.onerror = () => {
+        this.isPlaying = false;
+        this.currentUtterance = null;
+        if (this.onPlaybackStateChange) this.onPlaybackStateChange(false);
+        resolve();
+      };
+
+      this.currentUtterance = utterance;
+      window.speechSynthesis.speak(utterance);
+    });
   }
 
   public getAnalyser(): AnalyserNode | null {
@@ -194,6 +250,11 @@ export class TtsService {
    * Barge-In: Cancela inmediatamente toda reproducción y vacía la cola en <50ms.
    */
   public abortPlayback(): void {
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+      this.currentUtterance = null;
+    }
+
     if (this.activeSource) {
       try {
         this.activeSource.stop();

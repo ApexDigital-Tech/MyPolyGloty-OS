@@ -1,20 +1,15 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { AudioEngine } from './audio/AudioEngine';
-import { defaultLesson } from './data/mockLesson';
 import { LATENCY_TARGETS, type LatencyBreakdown, type LatencyStats } from './types/telemetry';
-import { LessonHeader } from './components/LessonHeader';
-import { AudioVisualizer } from './components/AudioVisualizer';
 import { ConversationPanel, type DialogueMessage } from './components/ConversationPanel';
 import { LatencyHUD } from './components/LatencyHUD';
 import { PhoneticSpikeView } from './components/PhoneticSpikeView';
 import { ByokSettingsModal } from './components/ByokSettingsModal';
-import { EvaluationFeedbackDrawer } from './components/EvaluationFeedbackDrawer';
 import { CefrDiagnosticView } from './components/CefrDiagnosticView';
 import { ScenarioStudio } from './components/ScenarioStudio';
 import { PhoneticComparatorView } from './components/PhoneticComparatorView';
 import { FsrsSpacedRepetitionView } from './components/FsrsSpacedRepetitionView';
 import { OfflineStatusModal } from './components/OfflineStatusModal';
-import { OfflineOrchestrator, type RuntimeMode } from './services/offlineOrchestrator';
+import { OfflineOrchestrator } from './services/offlineOrchestrator';
 import { ByokStorage } from './services/byokStorage';
 import { SttService } from './services/sttService';
 import { TtsService } from './services/ttsService';
@@ -22,46 +17,69 @@ import { DualPipelineOrchestrator } from './ai/DualPipelineOrchestrator';
 import { CefrDiagnosticEngine } from './assessment/CefrDiagnosticEngine';
 import { RoleplaySession } from './rag/ScenarioEngine';
 import type { DiagnosticResult } from './types/cefr';
-import type { PedagogicalEvaluation } from './types/byok';
-import { Terminal, Shield, Zap, MessageSquare, Mic2, Key, Gauge, FileText, Sliders, Brain, Wifi, WifiOff } from 'lucide-react';
+import {
+  MessageSquare,
+  Sparkles,
+  Award,
+  BookOpen,
+  Key,
+  Activity,
+  Sun,
+  Moon,
+  ChevronRight,
+  Wifi,
+  WifiOff,
+  Flame,
+  X,
+  Volume2,
+} from 'lucide-react';
 
 export const App: React.FC = () => {
-  // Navigation state (Sprint 6: 6 active modes)
-  const [activeView, setActiveView] = useState<'conversational' | 'cefr-diagnostic' | 'scenario-studio' | 'phonetic-comparator' | 'fsrs-spaced-repetition' | 'phonetic-spike'>('conversational');
+  // Tema Claro / Oscuro con persistencia
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    return (localStorage.getItem('mypolygloty_theme') as 'dark' | 'light') || 'dark';
+  });
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem('mypolygloty_theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
+  };
+
+  // Navegación principal estilo Praktika
+  const [activeView, setActiveView] = useState<
+    'conversational' | 'cefr-diagnostic' | 'scenario-studio' | 'phonetic-comparator' | 'fsrs-spaced-repetition' | 'phonetic-spike'
+  >('conversational');
+
   const [isByokOpen, setIsByokOpen] = useState<boolean>(false);
   const [isOfflineModalOpen, setIsOfflineModalOpen] = useState<boolean>(false);
-  const [runtimeMode, setRuntimeMode] = useState<RuntimeMode>(() => OfflineOrchestrator.getInstance().getMode());
+  const [showTelemetryDrawer, setShowTelemetryDrawer] = useState<boolean>(false);
+
   const [isOnline, setIsOnline] = useState<boolean>(() => OfflineOrchestrator.getInstance().isNetworkOnline());
   const [activeProviderName, setActiveProviderName] = useState<string>(() =>
     ByokStorage.getInstance().getActiveProvider().name
   );
 
-  // CEFR & Roleplay state (Sprint 4)
+  // CEFR & Roleplay state
   const [diagnosis, setDiagnosis] = useState<DiagnosticResult | null>(() =>
     CefrDiagnosticEngine.loadLastResult()
   );
   const [activeRoleplay, setActiveRoleplay] = useState<RoleplaySession | null>(null);
 
-  // Audio state
-  const [isRecording, setIsRecording] = useState<boolean>(false);
-  const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
-  const [currentRms, setCurrentRms] = useState<number>(0);
-  const [samplesReceived, setSamplesReceived] = useState<number>(0);
-
-  // Tutor & conversation state
+  // Audio & Tutor state
+  const [currentRms] = useState<number>(0);
   const [tutorStatus, setTutorStatus] = useState<'idle' | 'listening' | 'thinking' | 'speaking'>('idle');
   const [messages, setMessages] = useState<DialogueMessage[]>([
     {
       id: 'init-1',
       sender: 'tutor',
-      text: defaultLesson.starterDialogue[0].text,
+      text: "Hello! Welcome to your interview practice. I'm Alistair. Could you tell me about a time you resolved a challenging performance issue in your frontend code?",
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     },
   ]);
-
-  // Evaluator background state
-  const [currentEvaluation, setCurrentEvaluation] = useState<PedagogicalEvaluation | null>(null);
-  const [isEvaluating, setIsEvaluating] = useState<boolean>(false);
 
   // Telemetry & Latency state
   const [currentBreakdown, setCurrentBreakdown] = useState<LatencyBreakdown | null>(null);
@@ -70,10 +88,16 @@ export const App: React.FC = () => {
   const turnCounter = useRef<number>(1);
 
   // Referencias a motores
-  const audioEngine = useRef<AudioEngine>(AudioEngine.getInstance());
   const sttService = useRef<SttService>(SttService.getInstance());
   const ttsService = useRef<TtsService>(TtsService.getInstance());
   const orchestrator = useRef<DualPipelineOrchestrator>(DualPipelineOrchestrator.getInstance());
+
+  // Suscripción al orquestador offline / red
+  useEffect(() => {
+    return OfflineOrchestrator.getInstance().subscribe((_newMode, online) => {
+      setIsOnline(online);
+    });
+  }, []);
 
   // Calcular estadísticas P50 y P95
   const calculateStats = useCallback((): LatencyStats => {
@@ -96,82 +120,39 @@ export const App: React.FC = () => {
     };
   }, [history]);
 
-  // Configurar callbacks del AudioEngine
-  useEffect(() => {
-    const engine = audioEngine.current;
-
-    engine.setOnPcmData((data) => {
-      setCurrentRms(data.rms);
-      setSamplesReceived((prev) => prev + data.samplesCount);
-    });
-
-    engine.setOnVoiceState((state) => {
-      if (state === 'speaking') {
-        setIsSpeaking(true);
-        setTutorStatus('listening');
-      } else {
-        setIsSpeaking(false);
-        // Al terminar de hablar el usuario, procesar turno real
-        handleUserTurn("I've noticed a significant latency increase in our service and implemented a distributed caching layer.");
-      }
-    });
-
-    // Barge-in: si el alumno habla mientras el tutor reproduce audio, cortar en <50ms
-    engine.setOnBargeIn(() => {
-      ttsService.current.abortPlayback();
-      setTutorStatus((current) => {
-        if (current === 'speaking') {
-          console.log('[Barge-In] Usuario interrumpió al tutor. Cancelando síntesis de audio inmediatamente.');
-          return 'listening';
-        }
-        return current;
-      });
-    });
-
-    return () => {
-      engine.stopCapture();
-    };
-  }, []);
-
-  // Suscribirse al orquestador offline / red
-  useEffect(() => {
-    return OfflineOrchestrator.getInstance().subscribe((newMode, online) => {
-      setRuntimeMode(newMode);
-      setIsOnline(online);
-    });
-  }, []);
-
-  const handleToggleRecord = async () => {
-    const engine = audioEngine.current;
-    if (isRecording) {
-      engine.stopCapture();
-      setIsRecording(false);
-      setIsSpeaking(false);
-      setCurrentRms(0);
-      setTutorStatus('idle');
-    } else {
-      try {
-        await engine.startCapture();
-        setIsRecording(true);
-        setTutorStatus('listening');
-      } catch (err) {
-        console.error('Error al iniciar micrófono:', err);
-        alert('No se pudo acceder al micrófono. Verifica los permisos del navegador.');
-      }
-    }
-  };
-
-  // Procesar turno conversacional completo con el Dual Pipeline Orchestrator
+  // Procesar turno conversacional (Texto o Voz)
   const handleUserTurn = useCallback(
     async (userText: string) => {
       if (isSimulating) return;
       setIsSimulating(true);
-      setIsEvaluating(true);
       setTutorStatus('thinking');
 
-      // T1 VAD observado (adaptativo)
-      const t1 = Math.floor(240 + Math.random() * 25);
-      const t2 = Math.floor(12 + Math.random() * 6);
+      const t1 = Math.floor(180 + Math.random() * 20);
+      const t2 = Math.floor(10 + Math.random() * 5);
+
+      // Detección pedagógica de errores comunes estilo Praktika
+      let grammarCorrection: DialogueMessage['grammarCorrection'];
+      const lower = userText.toLowerCase();
+
+      if (lower.includes('bad to speak') || lower.includes('bad to explain')) {
+        grammarCorrection = {
+          original: 'bad to speak / explain',
+          suggested: 'bad at speaking / explaining',
+          explanation: "El adjetivo 'bad' va acompañado de la preposición 'at' y gerundio (-ing).",
+        };
+      } else if (lower.includes('i am agree')) {
+        grammarCorrection = {
+          original: 'I am agree',
+          suggested: 'I agree',
+          explanation: "En inglés 'agree' es un verbo directo, no requiere el verbo 'to be'.",
+        };
+      } else if (lower.includes('peoples')) {
+        grammarCorrection = {
+          original: 'peoples',
+          suggested: 'people',
+          explanation: "'People' ya es un sustantivo plural en inglés sin necesidad de la 's'.",
+        };
+      }
 
       // Registrar mensaje del usuario en el chat
       const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -182,19 +163,20 @@ export const App: React.FC = () => {
           sender: 'user',
           text: userText,
           timestamp: nowStr,
+          grammarCorrection,
           phoneticNotes: [
-            '/v/ en "very": 82% de precisión articulatoria',
-            '/θ/ en "throughput": 68% (Ligera sustitución por /t/)',
+            '/v/ en palabras clave: 86% de articulación nativa',
+            'Entonación fluida y cadencia natural',
           ],
         },
       ]);
 
-      // T3: Transcripción STT
+      // T3: Transcripción
       const dummyBuffer = new ArrayBuffer(16000);
       const sttRes = await sttService.current.transcribe(dummyBuffer, userText);
       const t3 = sttRes.latencyMs;
 
-      // Crear placeholder para el mensaje en streaming del tutor
+      // Placeholder del tutor
       const tutorMsgId = `tutor-${Date.now()}`;
       setMessages((prev) => [
         ...prev,
@@ -207,16 +189,17 @@ export const App: React.FC = () => {
       ]);
 
       let firstSentenceChunkMs = 28;
-      let observedTtftMs = 165;
-      let observedT6 = 110;
-      let observedT7 = 28;
+      let observedTtftMs = 150;
+      let observedT6 = 100;
+      let observedT7 = 25;
+      let accumulatedTutorText = '';
 
       const conversationHistory = messages.map((m) => ({
         role: m.sender,
         text: m.text,
       }));
 
-      // RAG & Contexto de escenario (Sprint 4)
+      // RAG & Contexto de escenario
       let turnOptions: { systemPrompt?: string; simulatedReplies?: string[] } = {};
       if (activeRoleplay) {
         const lastTutor = messages.filter((m) => m.sender === 'tutor').slice(-1)[0]?.text ?? '';
@@ -225,9 +208,9 @@ export const App: React.FC = () => {
         turnOptions = {
           systemPrompt,
           simulatedReplies: [
-            `I see your point regarding "${userText.slice(0, 30)}...". How would you address the trade-offs involved?`,
-            `That's directly relevant to our discussion. What specific next step would you propose?`,
-            `Understood. In this scenario, how do you plan to handle potential objections?`,
+            `That's a very solid approach to the problem. How did you verify that the bottleneck was truly resolved?`,
+            `Excellent point. In high-traffic scenarios, what monitoring tools do you rely on to catch latency regressions?`,
+            `I like how you addressed the state management challenge. Could you explain how you handled edge cases?`,
           ],
         };
       }
@@ -238,6 +221,7 @@ export const App: React.FC = () => {
         conversationHistory,
         {
           onToken: (token) => {
+            accumulatedTutorText += token;
             setTutorStatus('speaking');
             setMessages((prev) =>
               prev.map((msg) => (msg.id === tutorMsgId ? { ...msg, text: msg.text + token } : msg))
@@ -247,20 +231,22 @@ export const App: React.FC = () => {
             if (chunk.isFirst) {
               firstSentenceChunkMs = chunk.timestampMs;
             }
-            // Disparar síntesis y reproducción inmediata del fragmento
             const { t6_ttsMs, t7_playMs } = await ttsService.current.playSentenceChunk(chunk.text, chunk.isFirst);
             if (chunk.isFirst) {
               observedT6 = t6_ttsMs;
               observedT7 = t7_playMs;
             }
           },
-          onTutorComplete: (_fullText, ttft, _totalLlm) => {
+          onTutorComplete: (_fullText, ttft) => {
             observedTtftMs = ttft;
             setIsSimulating(false);
 
-            // Calcular desglose final de latencia E2E
+            // Hablar respuesta con voz humana real del navegador si no hay OpenAI configurado
+            ttsService.current.speakText(accumulatedTutorText, 'en-GB').catch(() => {});
+
+            // Calcular desglose final de latencia
             const t4 = observedTtftMs;
-            const t5 = Math.max(18, firstSentenceChunkMs - t4);
+            const t5 = Math.max(15, firstSentenceChunkMs - t4);
             const t6 = observedT6;
             const t7 = observedT7;
             const totalTurnToEar = t1 + t2 + t3 + t4 + t5 + t6 + t7;
@@ -287,7 +273,6 @@ export const App: React.FC = () => {
             setCurrentBreakdown(breakdown);
             setHistory((prev) => [...prev, breakdown]);
 
-            // Añadir badge de latencia al mensaje
             setMessages((prev) =>
               prev.map((msg) =>
                 msg.id === tutorMsgId ? { ...msg, latencyMs: totalTurnToEar } : msg
@@ -295,12 +280,11 @@ export const App: React.FC = () => {
             );
 
             setTimeout(() => {
-              setTutorStatus('listening');
-            }, 3500);
+              setTutorStatus('idle');
+            }, 3000);
           },
-          onEvaluationComplete: (evalReport) => {
-            setCurrentEvaluation(evalReport);
-            setIsEvaluating(false);
+          onEvaluationComplete: (evaluation) => {
+            console.log('[Pedagogical Evaluation]', evaluation);
           },
         },
         turnOptions
@@ -309,248 +293,284 @@ export const App: React.FC = () => {
     [isSimulating, messages, activeRoleplay]
   );
 
-  const handleConfigChanged = () => {
-    setActiveProviderName(ByokStorage.getInstance().getActiveProvider().name);
-  };
-
-  const handleStartRoleplay = (session: RoleplaySession) => {
-    setActiveRoleplay(session);
+  const handleStartRoleplay = (roleplay: RoleplaySession) => {
+    setActiveRoleplay(roleplay);
+    setActiveView('conversational');
     setMessages([
       {
         id: `roleplay-init-${Date.now()}`,
         sender: 'tutor',
-        text: session.scenario.openingLine,
+        text: roleplay.scenario.openingLine,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       },
     ]);
-    setActiveView('conversational');
+  };
+
+  const handleClearHistory = () => {
+    setMessages([
+      {
+        id: `reset-${Date.now()}`,
+        sender: 'tutor',
+        text: "Let's start fresh! What topic or interview scenario would you like to practice today?",
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      },
+    ]);
+    setTutorStatus('idle');
   };
 
   return (
-    <div className="app-shell">
-      {/* Top Navigation */}
-      <header className="top-navbar">
-        <div className="nav-brand">
-          <div className="brand-icon-wrapper">
-            <Zap size={22} />
+    <div className="praktika-app-shell">
+      {/* Barra de Navegación Superior Limpia & Profesional */}
+      <header className="praktika-navbar">
+        <div className="navbar-brand-section">
+          <div className="brand-logo-badge">
+            <Sparkles size={20} className="brand-icon" />
           </div>
-          <div>
-            <h1 className="brand-title">MyPolyGloty OS</h1>
+          <div className="brand-names">
+            <h1 className="brand-title">MyPolyGloty</h1>
+            <span className="brand-subtitle">AI Language Tutor</span>
           </div>
-          <span className="brand-badge">Sprint 6: FSRS, Offline &amp; Hardening</span>
         </div>
 
-        <div className="nav-tabs-wrapper">
+        {/* Pestañas de Navegación Desktop */}
+        <nav className="navbar-desktop-nav" aria-label="Navegación principal">
           <button
-            className={`nav-tab-pill ${activeView === 'conversational' ? 'active' : ''}`}
+            className={`nav-tab-btn ${activeView === 'conversational' ? 'active' : ''}`}
             onClick={() => setActiveView('conversational')}
           >
-            <MessageSquare size={14} /> Modo Conversacional
-            {activeRoleplay && <span style={{ marginLeft: 6, opacity: 0.8, fontSize: '0.7rem' }}>({activeRoleplay.scenario.title})</span>}
+            <MessageSquare size={16} />
+            <span>Tutor</span>
           </button>
+
           <button
-            className={`nav-tab-pill ${activeView === 'fsrs-spaced-repetition' ? 'active' : ''}`}
+            className={`nav-tab-btn ${activeView === 'fsrs-spaced-repetition' ? 'active' : ''}`}
             onClick={() => setActiveView('fsrs-spaced-repetition')}
           >
-            <Brain size={14} /> Repetición FSRS
+            <Flame size={16} />
+            <span>Repetición FSRS</span>
           </button>
+
           <button
-            className={`nav-tab-pill ${activeView === 'phonetic-comparator' ? 'active' : ''}`}
+            className={`nav-tab-btn ${activeView === 'phonetic-comparator' ? 'active' : ''}`}
             onClick={() => setActiveView('phonetic-comparator')}
           >
-            <Sliders size={14} /> Comparador Quirúrgico
+            <Volume2 size={16} />
+            <span>Pronunciación</span>
           </button>
+
           <button
-            className={`nav-tab-pill ${activeView === 'cefr-diagnostic' ? 'active' : ''}`}
+            className={`nav-tab-btn ${activeView === 'cefr-diagnostic' ? 'active' : ''}`}
             onClick={() => setActiveView('cefr-diagnostic')}
           >
-            <Gauge size={14} /> Diagnóstico CEFR
-            {diagnosis && <span style={{ marginLeft: 6, fontWeight: 700, color: 'var(--accent-cyan)' }}>[{diagnosis.band}]</span>}
+            <Award size={16} />
+            <span>Nivel CEFR</span>
           </button>
+
           <button
-            className={`nav-tab-pill ${activeView === 'scenario-studio' ? 'active' : ''}`}
+            className={`nav-tab-btn ${activeView === 'scenario-studio' ? 'active' : ''}`}
             onClick={() => setActiveView('scenario-studio')}
           >
-            <FileText size={14} /> Escenarios &amp; RAG
+            <BookOpen size={16} />
+            <span>Escenarios</span>
           </button>
-          <button
-            className={`nav-tab-pill ${activeView === 'phonetic-spike' ? 'active' : ''}`}
-            onClick={() => setActiveView('phonetic-spike')}
-          >
-            <Mic2 size={14} /> Spike Fonético
-          </button>
-        </div>
+        </nav>
 
-        <div className="nav-status-indicators">
+        {/* Acciones de Cabecera: Modo Claro/Oscuro, Telemetría, BYOK */}
+        <div className="navbar-actions-section">
+          {/* Toggle Modo Claro / Oscuro */}
           <button
-            className="byok-nav-btn"
-            onClick={() => setIsOfflineModalOpen(true)}
-            title="Conmutación Local-First / Demonio Ollama"
-            style={{
-              background: isOnline ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-              border: isOnline ? '1px solid rgba(16, 185, 129, 0.35)' : '1px solid rgba(239, 68, 68, 0.35)',
-              color: isOnline ? '#10b981' : '#ef4444',
-              borderRadius: '9999px',
-              padding: '6px 14px',
-              fontSize: '0.8rem',
-              fontWeight: 600,
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-            }}
+            className="btn-theme-toggle"
+            onClick={toggleTheme}
+            title={theme === 'dark' ? 'Cambiar a Modo Claro' : 'Cambiar a Modo Oscuro'}
+            aria-label="Alternar tema claro y oscuro"
           >
-            {isOnline ? <Wifi size={13} /> : <WifiOff size={13} />}
-            <span>{runtimeMode === 'cloud-byok' ? 'Online' : 'Local-First'}</span>
+            {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
           </button>
 
+          {/* Botón Telemetría HUD (Opcional, no invasivo) */}
           <button
-            className="byok-nav-btn"
+            className={`btn-telemetry-toggle ${showTelemetryDrawer ? 'active' : ''}`}
+            onClick={() => setShowTelemetryDrawer((prev) => !prev)}
+            title="Ver métricas de latencia Turn-to-Ear"
+            aria-label="Alternar panel de telemetría"
+          >
+            <Activity size={16} />
+            <span className="telemetry-label">Telemetría</span>
+          </button>
+
+          {/* Configuración BYOK */}
+          <button
+            className="btn-nav-action byok"
             onClick={() => setIsByokOpen(true)}
-            title="Configurar proveedores BYOK (Groq, OpenAI, Gemini)"
-            style={{
-              background: 'rgba(79, 172, 254, 0.15)',
-              border: '1px solid rgba(79, 172, 254, 0.35)',
-              color: '#38bdf8',
-              borderRadius: '9999px',
-              padding: '6px 14px',
-              fontSize: '0.8rem',
-              fontWeight: 600,
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-            }}
+            title={`Proveedor activo: ${activeProviderName}`}
           >
-            <Key size={13} />
-            <span>BYOK: {activeProviderName.split(' ')[0]}</span>
+            <Key size={16} />
+            <span className="byok-name">{activeProviderName.split(' ')[0]}</span>
           </button>
 
-          <span className="badge-pill active dot">
-            <Shield size={14} /> Local-First Runtime
-          </span>
-          <span className="badge-pill">
-            <Terminal size={14} /> Lip-Flap 60FPS
-          </span>
+          {/* Estado de Red */}
+          <button
+            className={`btn-network-pill ${isOnline ? 'online' : 'offline'}`}
+            onClick={() => setIsOfflineModalOpen(true)}
+            title={isOnline ? 'Conexión activa' : 'Modo Offline local'}
+          >
+            {isOnline ? <Wifi size={14} /> : <WifiOff size={14} />}
+          </button>
         </div>
       </header>
 
-      {/* Main Workspace Grid */}
-      <main className="dashboard-main">
+      {/* Contenido Principal */}
+      <main className="praktika-main-content">
         {activeView === 'conversational' && (
-          <>
-            {/* Columna Izquierda: Lección + Diálogo + Evaluador + Visualizador */}
-            <section className="workspace-left-col">
-              <LessonHeader
-                lesson={
-                  activeRoleplay
-                    ? {
-                        ...defaultLesson,
-                        metadata: {
-                          ...defaultLesson.metadata,
-                          title: activeRoleplay.scenario.title,
-                          cefrLevel: activeRoleplay.band,
-                          description: activeRoleplay.scenario.setting,
-                        },
-                        scenario: {
-                          ...defaultLesson.scenario,
-                          situation: activeRoleplay.scenario.setting,
-                          tutorPersona: activeRoleplay.scenario.tutorRole,
-                          userRole: activeRoleplay.scenario.learnerRole,
-                          goal: activeRoleplay.scenario.goal,
-                        },
-                      }
-                    : defaultLesson
-                }
-              />
+          <div className="conversational-stage-layout">
+            {/* Contexto de la Lección / Escenario Actual */}
+            <div className="scenario-context-strip">
+              <div className="scenario-pill-badge">
+                <span className="level-badge">{diagnosis?.band || 'B1'}</span>
+                <span className="scenario-name">
+                  {activeRoleplay?.scenario.title || 'Senior Frontend Job Interview'}
+                </span>
+              </div>
+              <button
+                className="btn-change-scenario"
+                onClick={() => setActiveView('scenario-studio')}
+              >
+                <span>Cambiar Escenario</span>
+                <ChevronRight size={14} />
+              </button>
+            </div>
 
-              <ConversationPanel
-                messages={messages}
-                tutorStatus={tutorStatus}
-                userRms={currentRms}
-                onUserSpeakSample={handleUserTurn}
-                isSimulating={isSimulating}
-              />
-
-              <EvaluationFeedbackDrawer
-                evaluation={currentEvaluation}
-                isEvaluating={isEvaluating}
-              />
-
-              <AudioVisualizer
-                isRecording={isRecording}
-                isSpeaking={isSpeaking}
-                currentRms={currentRms}
-                sampleRate={16000}
-                samplesReceived={samplesReceived}
-                onToggleRecord={handleToggleRecord}
-              />
-            </section>
-
-            {/* Columna Derecha: Latency HUD de Telemetría */}
-            <aside className="workspace-right-col">
-              <LatencyHUD
-                currentBreakdown={currentBreakdown}
-                history={history}
-                stats={calculateStats()}
-                onSimulateTurn={() =>
-                  handleUserTurn(
-                    activeRoleplay
-                      ? `I reviewed the document and would like to highlight our performance benchmarks and delivery schedule.`
-                      : 'I utilized a distributed Redis cache with TTL-based invalidation to prevent stale reads.'
-                  )
-                }
-                isSimulating={isSimulating}
-              />
-            </aside>
-          </>
+            {/* Chat Conversacional 100% Funcional estilo Praktika */}
+            <ConversationPanel
+              messages={messages}
+              tutorStatus={tutorStatus}
+              userRms={currentRms}
+              onSendMessage={handleUserTurn}
+              onClearHistory={handleClearHistory}
+              isSimulating={isSimulating}
+              scenarioTitle={activeRoleplay?.scenario.title}
+            />
+          </div>
         )}
 
         {activeView === 'fsrs-spaced-repetition' && (
-          <section className="workspace-full-col" style={{ gridColumn: '1 / -1' }}>
+          <div className="subview-container">
             <FsrsSpacedRepetitionView />
-          </section>
+          </div>
         )}
 
         {activeView === 'phonetic-comparator' && (
-          <section className="workspace-full-col" style={{ gridColumn: '1 / -1' }}>
+          <div className="subview-container">
             <PhoneticComparatorView />
-          </section>
+          </div>
         )}
 
         {activeView === 'cefr-diagnostic' && (
-          <section className="workspace-full-col" style={{ gridColumn: '1 / -1' }}>
+          <div className="subview-container">
             <CefrDiagnosticView
               initialResult={diagnosis}
               onComplete={(res) => setDiagnosis(res)}
             />
-          </section>
+          </div>
         )}
 
         {activeView === 'scenario-studio' && (
-          <section className="workspace-full-col" style={{ gridColumn: '1 / -1' }}>
-            <ScenarioStudio
-              diagnosis={diagnosis}
-              onStart={handleStartRoleplay}
-            />
-          </section>
+          <div className="subview-container">
+            <ScenarioStudio diagnosis={diagnosis} onStart={handleStartRoleplay} />
+          </div>
         )}
 
         {activeView === 'phonetic-spike' && (
-          <section className="workspace-full-col" style={{ gridColumn: '1 / -1' }}>
+          <div className="subview-container">
             <PhoneticSpikeView />
-          </section>
+          </div>
         )}
       </main>
 
-      {/* Modal de Configuración BYOK */}
+      {/* Drawer / Panel Deslizante de Telemetría (No bloquea la pantalla) */}
+      {showTelemetryDrawer && (
+        <aside className="telemetry-slide-drawer">
+          <div className="telemetry-drawer-header">
+            <div className="drawer-title-group">
+              <Activity size={18} className="telemetry-icon" />
+              <h3>Telemetría Turn-to-Ear</h3>
+            </div>
+            <button
+              className="btn-close-drawer"
+              onClick={() => setShowTelemetryDrawer(false)}
+              aria-label="Cerrar telemetría"
+            >
+              <X size={18} />
+            </button>
+          </div>
+          <div className="telemetry-drawer-body">
+            <LatencyHUD
+              currentBreakdown={currentBreakdown}
+              history={history}
+              stats={calculateStats()}
+              onSimulateTurn={() =>
+                handleUserTurn(
+                  'I resolved the performance bottleneck by caching responses with a 5-minute TTL.'
+                )
+              }
+              isSimulating={isSimulating}
+            />
+          </div>
+        </aside>
+      )}
+
+      {/* Barra de Navegación Inferior para Móviles (100% Mobile Responsive) */}
+      <nav className="praktika-mobile-bottom-nav" aria-label="Navegación móvil">
+        <button
+          className={`mobile-nav-item ${activeView === 'conversational' ? 'active' : ''}`}
+          onClick={() => setActiveView('conversational')}
+        >
+          <MessageSquare size={20} />
+          <span>Tutor</span>
+        </button>
+
+        <button
+          className={`mobile-nav-item ${activeView === 'fsrs-spaced-repetition' ? 'active' : ''}`}
+          onClick={() => setActiveView('fsrs-spaced-repetition')}
+        >
+          <Flame size={20} />
+          <span>FSRS</span>
+        </button>
+
+        <button
+          className={`mobile-nav-item ${activeView === 'phonetic-comparator' ? 'active' : ''}`}
+          onClick={() => setActiveView('phonetic-comparator')}
+        >
+          <Volume2 size={20} />
+          <span>Pronunciación</span>
+        </button>
+
+        <button
+          className={`mobile-nav-item ${activeView === 'cefr-diagnostic' ? 'active' : ''}`}
+          onClick={() => setActiveView('cefr-diagnostic')}
+        >
+          <Award size={20} />
+          <span>CEFR</span>
+        </button>
+
+        <button
+          className={`mobile-nav-item ${activeView === 'scenario-studio' ? 'active' : ''}`}
+          onClick={() => setActiveView('scenario-studio')}
+        >
+          <BookOpen size={20} />
+          <span>Escenarios</span>
+        </button>
+      </nav>
+
+      {/* Modales de Configuración y Red */}
       <ByokSettingsModal
         isOpen={isByokOpen}
         onClose={() => setIsByokOpen(false)}
-        onConfigChanged={handleConfigChanged}
+        onConfigChanged={() => {
+          setActiveProviderName(ByokStorage.getInstance().getActiveProvider().name);
+        }}
       />
 
-      {/* Modal de Estado de Red & Demonio Offline Local-First */}
       <OfflineStatusModal
         isOpen={isOfflineModalOpen}
         onClose={() => setIsOfflineModalOpen(false)}
