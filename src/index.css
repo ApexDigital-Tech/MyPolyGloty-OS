@@ -5440,3 +5440,325 @@ body {
   }
 }
 
+/* ==========================================================================
+   Facilitator Level Bar, Sub-Translations & Routine Progress Strip
+   ========================================================================== */
+
+.facilitator-level-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 16px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.lang-selector-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg-tertiary);
+  padding: 3px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-subtle);
+}
+
+.lang-btn {
+  border: none;
+  background: transparent;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.lang-btn.active {
+  background: var(--bg-card-solid);
+  color: var(--text-main);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+}
+
+.level-pills-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  overflow-x: auto;
+}
+
+.level-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card-solid);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.level-pill-btn:hover {
+  border-color: var(--border-highlight);
+  color: var(--text-main);
+}
+
+.level-pill-btn.active {
+  background: linear-gradient(135deg, var(--accent-primary), var(--accent-purple));
+  color: #ffffff;
+  border-color: transparent;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+}
+
+.level-pill-btn .lvl-code {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 0.76rem;
+}
+
+.level-pill-btn .lvl-label {
+  font-size: 0.68rem;
+  opacity: 0.9;
+}
+
+.btn-translation-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-translation-toggle:hover {
+  border-color: var(--accent-cyan);
+  color: var(--text-main);
+}
+
+.btn-translation-toggle.active {
+  background: rgba(6, 182, 212, 0.12);
+  color: var(--accent-cyan);
+  border-color: rgba(6, 182, 212, 0.35);
+}
+
+/* Evaluated Progress & Routine Strip */
+.eval-progress-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border-subtle);
+  position: relative;
+}
+
+.progress-routine-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.routine-dropdown-anchor {
+  position: relative;
+}
+
+.routine-selector-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-main);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.routine-selector-btn:hover {
+  border-color: var(--border-highlight);
+}
+
+.routines-dropdown-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 6px;
+  width: 290px;
+  background: var(--bg-card-solid);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-float);
+  z-index: 60;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dropdown-title {
+  font-size: 0.7rem;
+  color: var(--text-subtle);
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 4px 8px;
+}
+
+.routine-item-btn {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: transparent;
+  color: var(--text-main);
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.routine-item-btn:hover {
+  background: var(--bg-secondary);
+}
+
+.routine-item-btn.selected {
+  background: rgba(99, 102, 241, 0.12);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+}
+
+.routine-item-btn .item-icon {
+  font-size: 1.1rem;
+}
+
+.routine-item-btn .item-text strong {
+  display: block;
+  font-size: 0.78rem;
+}
+
+.routine-item-btn .item-text p {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  line-height: 1.3;
+}
+
+.turn-progress-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.flame-icon {
+  color: #f59e0b;
+}
+
+.eval-scores-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.score-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+}
+
+.score-name {
+  color: var(--text-subtle);
+}
+
+.score-val {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: var(--accent-green);
+}
+
+.lesson-progress-bar {
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--bg-secondary);
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-primary), var(--accent-cyan));
+  border-radius: 2px;
+  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Sub-Translations in Small Text */
+.bubble-sub-translation {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.12);
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  font-size: 0.76rem;
+  line-height: 1.4;
+  opacity: 0.88;
+  font-style: italic;
+}
+
+[data-theme="light"] .bubble-sub-translation {
+  border-top-color: rgba(0, 0, 0, 0.08);
+}
+
+.praktika-msg-bubble.tutor .bubble-sub-translation {
+  color: var(--text-muted);
+}
+
+.praktika-msg-bubble.user .bubble-sub-translation {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.sub-trans-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+  opacity: 0.75;
+}
+
+.sub-trans-text {
+  word-break: break-word;
+}
+
+/* Suggestion Chip Sub-translation */
+.suggestion-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.chip-main-text {
+  font-weight: 500;
+}
+
+.chip-sub-trans {
+  font-size: 0.68rem;
+  color: var(--text-subtle);
+  font-style: italic;
+}
+

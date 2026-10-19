@@ -18,6 +18,11 @@ import { CefrDiagnosticEngine } from './assessment/CefrDiagnosticEngine';
 import { RoleplaySession } from './rag/ScenarioEngine';
 import type { DiagnosticResult } from './types/cefr';
 import {
+  TutorFacilitatorService,
+  type LearningLevel,
+  type TargetLanguage,
+} from './services/tutorFacilitatorService';
+import {
   MessageSquare,
   Sparkles,
   Award,
@@ -69,6 +74,21 @@ export const App: React.FC = () => {
   );
   const [activeRoleplay, setActiveRoleplay] = useState<RoleplaySession | null>(null);
 
+  // Facilitador Pedagógico, Nivel e Idioma
+  const facilitator = useRef(TutorFacilitatorService.getInstance());
+  const [currentLevel, setCurrentLevel] = useState<LearningLevel>(() => facilitator.current.getLevel());
+  const [currentLanguage, setCurrentLanguage] = useState<TargetLanguage>(() => facilitator.current.getLanguage());
+  const [sessionStats, setSessionStats] = useState(() => {
+    const r = facilitator.current.getActiveRoutine();
+    return {
+      turnsCompleted: 0,
+      targetTurns: r.targetTurns,
+      fluencyScore: 82,
+      vocabScore: 80,
+      grammarScore: 86,
+    };
+  });
+
   // Audio & Tutor state
   const [currentRms] = useState<number>(0);
   const [tutorStatus, setTutorStatus] = useState<'idle' | 'listening' | 'thinking' | 'speaking'>('idle');
@@ -76,7 +96,8 @@ export const App: React.FC = () => {
     {
       id: 'init-1',
       sender: 'tutor',
-      text: "Hello! Welcome to your interview practice. I'm Alistair. Could you tell me about a time you resolved a challenging performance issue in your frontend code?",
+      text: "Welcome to your interactive session! I'm Alistair, your AI tutor. Tell me, what topic would you like to explore today?",
+      translation: "¡Bienvenido a tu sesión interactiva! Soy Alistair, tu tutor IA. Cuéntame, ¿qué tema te gustaría explorar hoy?",
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     },
   ]);
@@ -98,6 +119,74 @@ export const App: React.FC = () => {
       setIsOnline(online);
     });
   }, []);
+
+  // Handlers para cambio de Nivel, Idioma y Rutina
+  const handleLevelChange = (lvl: LearningLevel) => {
+    setCurrentLevel(lvl);
+    facilitator.current.setLevel(lvl);
+    const r = facilitator.current.getActiveRoutine();
+    setSessionStats({
+      turnsCompleted: 0,
+      targetTurns: r.targetTurns,
+      fluencyScore: 80,
+      vocabScore: 78,
+      grammarScore: 82,
+    });
+    setMessages([
+      {
+        id: `level-init-${Date.now()}`,
+        sender: 'tutor',
+        text: r.starterPrompt,
+        translation: r.starterTranslation,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      },
+    ]);
+  };
+
+  const handleLanguageChange = (lang: TargetLanguage) => {
+    setCurrentLanguage(lang);
+    facilitator.current.setLanguage(lang);
+    const r = facilitator.current.getActiveRoutine();
+    setCurrentLevel(r.level);
+    setSessionStats({
+      turnsCompleted: 0,
+      targetTurns: r.targetTurns,
+      fluencyScore: 80,
+      vocabScore: 78,
+      grammarScore: 82,
+    });
+    setMessages([
+      {
+        id: `lang-init-${Date.now()}`,
+        sender: 'tutor',
+        text: r.starterPrompt,
+        translation: r.starterTranslation,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      },
+    ]);
+  };
+
+  const handleRoutineSelect = (routineId: string) => {
+    const r = facilitator.current.setRoutine(routineId);
+    setCurrentLevel(r.level);
+    setCurrentLanguage(r.language);
+    setSessionStats({
+      turnsCompleted: 0,
+      targetTurns: r.targetTurns,
+      fluencyScore: 82,
+      vocabScore: 80,
+      grammarScore: 85,
+    });
+    setMessages([
+      {
+        id: `routine-init-${Date.now()}`,
+        sender: 'tutor',
+        text: r.starterPrompt,
+        translation: r.starterTranslation,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      },
+    ]);
+  };
 
   // Calcular estadísticas P50 y P95
   const calculateStats = useCallback((): LatencyStats => {
@@ -130,31 +219,13 @@ export const App: React.FC = () => {
       const t1 = Math.floor(180 + Math.random() * 20);
       const t2 = Math.floor(10 + Math.random() * 5);
 
-      // Detección pedagógica de errores comunes estilo Praktika
-      let grammarCorrection: DialogueMessage['grammarCorrection'];
-      const lower = userText.toLowerCase();
+      // Generar respuesta pedagógica facilitada y traducción
+      const facilitated = facilitator.current.generateFacilitatedResponse(userText);
+      setSessionStats(facilitated.progress);
 
-      if (lower.includes('bad to speak') || lower.includes('bad to explain')) {
-        grammarCorrection = {
-          original: 'bad to speak / explain',
-          suggested: 'bad at speaking / explaining',
-          explanation: "El adjetivo 'bad' va acompañado de la preposición 'at' y gerundio (-ing).",
-        };
-      } else if (lower.includes('i am agree')) {
-        grammarCorrection = {
-          original: 'I am agree',
-          suggested: 'I agree',
-          explanation: "En inglés 'agree' es un verbo directo, no requiere el verbo 'to be'.",
-        };
-      } else if (lower.includes('peoples')) {
-        grammarCorrection = {
-          original: 'peoples',
-          suggested: 'people',
-          explanation: "'People' ya es un sustantivo plural en inglés sin necesidad de la 's'.",
-        };
-      }
+      const userTranslation = facilitator.current.getTranslation(userText);
 
-      // Registrar mensaje del usuario en el chat
+      // Registrar mensaje del usuario en el chat con traducción
       const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       setMessages((prev) => [
         ...prev,
@@ -162,11 +233,14 @@ export const App: React.FC = () => {
           id: `user-${Date.now()}`,
           sender: 'user',
           text: userText,
+          translation: userTranslation,
           timestamp: nowStr,
-          grammarCorrection,
+          grammarCorrection: facilitated.grammarTip,
           phoneticNotes: [
-            '/v/ en palabras clave: 86% de articulación nativa',
-            'Entonación fluida y cadencia natural',
+            currentLanguage === 'zh'
+              ? 'Tonalidad precisa en Pinyin'
+              : '/v/ en palabras clave: 86% de articulación nativa',
+            'Cadencia fluida',
           ],
         },
       ]);
@@ -184,6 +258,7 @@ export const App: React.FC = () => {
           id: tutorMsgId,
           sender: 'tutor',
           text: '',
+          translation: '',
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         },
       ]);
@@ -199,21 +274,12 @@ export const App: React.FC = () => {
         text: m.text,
       }));
 
-      // RAG & Contexto de escenario
-      let turnOptions: { systemPrompt?: string; simulatedReplies?: string[] } = {};
-      if (activeRoleplay) {
-        const lastTutor = messages.filter((m) => m.sender === 'tutor').slice(-1)[0]?.text ?? '';
-        const retrieved = activeRoleplay.retrieve(userText, lastTutor);
-        const systemPrompt = activeRoleplay.buildSystemPrompt(retrieved);
-        turnOptions = {
-          systemPrompt,
-          simulatedReplies: [
-            `That's a very solid approach to the problem. How did you verify that the bottleneck was truly resolved?`,
-            `Excellent point. In high-traffic scenarios, what monitoring tools do you rely on to catch latency regressions?`,
-            `I like how you addressed the state management challenge. Could you explain how you handled edge cases?`,
-          ],
-        };
-      }
+      // RAG & Contexto de escenario o respuesta facilitada
+      const systemPrompt = `You are an interactive, supportive language tutor facilitating learning in ${currentLanguage === 'zh' ? 'Chinese Mandarin' : 'English'} for a student at level ${currentLevel}. Speak concisely, validate what they said, and ask one natural question to help them advance.`;
+      const turnOptions: { systemPrompt?: string; simulatedReplies?: string[] } = {
+        systemPrompt,
+        simulatedReplies: [facilitated.replyText],
+      };
 
       // Ejecutar Dual Pipeline Orchestrator
       await orchestrator.current.processTurn(
@@ -241,8 +307,9 @@ export const App: React.FC = () => {
             observedTtftMs = ttft;
             setIsSimulating(false);
 
-            // Hablar respuesta con voz humana real del navegador si no hay OpenAI configurado
-            ttsService.current.speakText(accumulatedTutorText, 'en-GB').catch(() => {});
+            // Hablar respuesta con voz humana real del navegador
+            const voiceLang = currentLanguage === 'zh' ? 'zh-CN' : 'en-GB';
+            ttsService.current.speakText(accumulatedTutorText, voiceLang).catch(() => {});
 
             // Calcular desglose final de latencia
             const t4 = observedTtftMs;
@@ -273,9 +340,16 @@ export const App: React.FC = () => {
             setCurrentBreakdown(breakdown);
             setHistory((prev) => [...prev, breakdown]);
 
+            // Asignar latencia y traducción final
             setMessages((prev) =>
               prev.map((msg) =>
-                msg.id === tutorMsgId ? { ...msg, latencyMs: totalTurnToEar } : msg
+                msg.id === tutorMsgId
+                  ? {
+                      ...msg,
+                      latencyMs: totalTurnToEar,
+                      translation: facilitated.translationText,
+                    }
+                  : msg
               )
             );
 
@@ -290,7 +364,7 @@ export const App: React.FC = () => {
         turnOptions
       );
     },
-    [isSimulating, messages, activeRoleplay]
+    [isSimulating, messages, currentLanguage, currentLevel]
   );
 
   const handleStartRoleplay = (roleplay: RoleplaySession) => {
@@ -448,7 +522,13 @@ export const App: React.FC = () => {
               onSendMessage={handleUserTurn}
               onClearHistory={handleClearHistory}
               isSimulating={isSimulating}
-              scenarioTitle={activeRoleplay?.scenario.title}
+              scenarioTitle={activeRoleplay?.scenario.title || facilitator.current.getActiveRoutine().title}
+              currentLevel={currentLevel}
+              currentLanguage={currentLanguage}
+              onLevelChange={handleLevelChange}
+              onLanguageChange={handleLanguageChange}
+              onRoutineSelect={handleRoutineSelect}
+              sessionStats={sessionStats}
             />
           </div>
         )}

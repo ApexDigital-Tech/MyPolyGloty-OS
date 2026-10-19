@@ -12,14 +12,24 @@ import {
   CheckCircle2,
   AlertCircle,
   HelpCircle,
+  Languages,
+  ChevronDown,
+  Flame,
 } from 'lucide-react';
 import { SpeechRecognitionService } from '../services/speechRecognitionService';
 import { TtsService } from '../services/ttsService';
+import {
+  TutorFacilitatorService,
+  type LearningLevel,
+  type TargetLanguage,
+  ROUTINES_CATALOG,
+} from '../services/tutorFacilitatorService';
 
 export interface DialogueMessage {
   id: string;
   sender: 'tutor' | 'user';
   text: string;
+  translation?: string;
   timestamp: string;
   phoneticNotes?: string[];
   grammarCorrection?: {
@@ -38,6 +48,18 @@ interface ConversationPanelProps {
   onClearHistory?: () => void;
   isSimulating: boolean;
   scenarioTitle?: string;
+  currentLevel: LearningLevel;
+  currentLanguage: TargetLanguage;
+  onLevelChange: (level: LearningLevel) => void;
+  onLanguageChange: (lang: TargetLanguage) => void;
+  onRoutineSelect: (routineId: string) => void;
+  sessionStats: {
+    turnsCompleted: number;
+    targetTurns: number;
+    fluencyScore: number;
+    vocabScore: number;
+    grammarScore: number;
+  };
 }
 
 export const ConversationPanel: React.FC<ConversationPanelProps> = ({
@@ -47,30 +69,66 @@ export const ConversationPanel: React.FC<ConversationPanelProps> = ({
   onSendMessage,
   onClearHistory,
   isSimulating,
-  scenarioTitle = 'Entrevista Senior Frontend',
+  scenarioTitle = 'Práctica Conversacional',
+  currentLevel,
+  currentLanguage,
+  onLevelChange,
+  onLanguageChange,
+  onRoutineSelect,
+  sessionStats,
 }) => {
   const [inputText, setInputText] = useState('');
   const [isListeningMic, setIsListeningMic] = useState(false);
   const [micError, setMicError] = useState<string | null>(null);
   const [playingMessageId, setPlayingMessageId] = useState<string | null>(null);
+  const [showTranslations, setShowTranslations] = useState<boolean>(true);
+  const [showRoutinesMenu, setShowRoutinesMenu] = useState<boolean>(false);
+
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   const speechRec = useRef(SpeechRecognitionService.getInstance());
   const tts = useRef(TtsService.getInstance());
+  const facilitator = useRef(TutorFacilitatorService.getInstance());
 
-  // Sugerencias estilo Praktika
-  const smartSuggestions = [
-    "I've worked on optimizing frontend bundle sizes using code splitting.",
-    "Could you elaborate on the team's testing methodology?",
-    "In my last role, we reduced latency by implementing Redis caching.",
-    "I'm bad to speak in public... (Prueba de corrección gramatical)",
-  ];
+  // Sugerencias dinámicas según idioma y nivel
+  const activeRoutine = facilitator.current.getActiveRoutine();
+
+  const sampleSuggestions = currentLanguage === 'zh'
+    ? [
+        { text: '你好！很高兴认识你。(Nǐ hǎo! Hěn gāoxìng rènshí nǐ.)', translation: '¡Hola! Mucho gusto en conocerte.' },
+        { text: '我今天很好，谢谢。(Wǒ jīntiān hěn hǎo, xièxiè.)', translation: 'Hoy estoy muy bien, gracias.' },
+        { text: '我想学习中文日常对话。(Wǒ xiǎng xuéxí zhōngwén rìcháng duìhuà.)', translation: 'Quiero aprender conversación diaria en chino.' },
+      ]
+    : currentLevel === 'A1'
+    ? [
+        { text: 'Hello! My name is Alex, nice to meet you.', translation: '¡Hola! Mi nombre es Alex, un placer conocerte.' },
+        { text: 'I am from Spain, and I live in Madrid.', translation: 'Soy de España y vivo en Madrid.' },
+        { text: 'I woke up early and drank coffee this morning.', translation: 'Me levanté temprano y tomé café esta mañana.' },
+        { text: 'Could you please speak a bit slower?', translation: '¿Podrías hablar un poco más despacio, por favor?' },
+      ]
+    : currentLevel === 'A2'
+    ? [
+        { text: 'In my free time, I love cooking and playing guitar.', translation: 'En mi tiempo libre, me encanta cocinar y tocar la guitarra.' },
+        { text: 'Last weekend I visited a beautiful park with my family.', translation: 'El fin de semana pasado visité un hermoso parque con mi familia.' },
+        { text: 'I usually exercise three times a week.', translation: 'Suelo hacer ejercicio tres veces a la semana.' },
+      ]
+    : [
+        { text: "I've worked on optimizing frontend bundle sizes using code splitting.", translation: 'He trabajado en optimizar paquetes frontend con división de código.' },
+        { text: 'Could you elaborate on the team testing methodology?', translation: '¿Podrías detallar la metodología de pruebas del equipo?' },
+        { text: 'We reduced latency by implementing distributed Redis caching.', translation: 'Redujimos la latencia implementando caché distribuida con Redis.' },
+        { text: 'I am bad to explain technical concepts... (Prueba de error)', translation: 'Tengo dificultades para explicar conceptos técnicos...' },
+      ];
 
   // Auto-scroll al final en cada mensaje nuevo
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, tutorStatus, isSimulating]);
+
+  // Actualizar idioma en SpeechRecognition
+  useEffect(() => {
+    speechRec.current.setLanguage(currentLanguage === 'zh' ? 'zh-CN' : 'en-US');
+  }, [currentLanguage]);
 
   // Manejar envío de texto
   const handleSend = () => {
@@ -135,16 +193,135 @@ export const ConversationPanel: React.FC<ConversationPanelProps> = ({
   const handlePlayAudio = async (id: string, text: string) => {
     try {
       setPlayingMessageId(id);
-      await tts.current.speakText(text, 'en-GB');
+      const langCode = currentLanguage === 'zh' ? 'zh-CN' : 'en-GB';
+      await tts.current.speakText(text, langCode);
     } catch (_) {
     } finally {
       setPlayingMessageId(null);
     }
   };
 
+  const progressPct = Math.min(100, Math.round((sessionStats.turnsCompleted / sessionStats.targetTurns) * 100));
+
   return (
     <div className="praktika-chat-card">
-      {/* Cabecera estilo Praktika con Tutor */}
+      {/* 1. Barra de Nivel & Idioma & Rutina Interactivas */}
+      <div className="facilitator-level-bar">
+        {/* Selector de Idioma */}
+        <div className="lang-selector-group">
+          <button
+            className={`lang-btn ${currentLanguage === 'en' ? 'active' : ''}`}
+            onClick={() => onLanguageChange('en')}
+            title="Aprender Inglés"
+          >
+            🇬🇧 English
+          </button>
+          <button
+            className={`lang-btn ${currentLanguage === 'zh' ? 'active' : ''}`}
+            onClick={() => onLanguageChange('zh')}
+            title="Aprender Chino Mandarín"
+          >
+            🇨🇳 中文 Chino
+          </button>
+        </div>
+
+        {/* Selector de Nivel CEFR Escalonado */}
+        <div className="level-pills-row">
+          {(['A1', 'A2', 'B1', 'B2', 'C1'] as LearningLevel[]).map((lvl) => (
+            <button
+              key={lvl}
+              className={`level-pill-btn ${currentLevel === lvl ? 'active' : ''}`}
+              onClick={() => onLevelChange(lvl)}
+              title={`Nivel ${lvl}`}
+            >
+              <span className="lvl-code">{lvl}</span>
+              <span className="lvl-label">
+                {lvl === 'A1' && 'Principiante'}
+                {lvl === 'A2' && 'Básico'}
+                {lvl === 'B1' && 'Intermedio'}
+                {lvl === 'B2' && 'Avanzado'}
+                {lvl === 'C1' && 'Maestría'}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        {/* Toggle de Traducciones Simultáneas en Español */}
+        <button
+          className={`btn-translation-toggle ${showTranslations ? 'active' : ''}`}
+          onClick={() => setShowTranslations((prev) => !prev)}
+          title="Mostrar u ocultar traducción debajo de cada frase"
+        >
+          <Languages size={15} />
+          <span>Traducción: {showTranslations ? 'ON' : 'OFF'}</span>
+        </button>
+      </div>
+
+      {/* 2. Barra de Medición Evaluada de Proceso & Rutina */}
+      <div className="eval-progress-strip">
+        <div className="progress-routine-info">
+          <div className="routine-dropdown-anchor">
+            <button
+              className="routine-selector-btn"
+              onClick={() => setShowRoutinesMenu((prev) => !prev)}
+            >
+              <span className="routine-icon">{activeRoutine.icon}</span>
+              <span className="routine-title">{activeRoutine.title}</span>
+              <ChevronDown size={14} />
+            </button>
+
+            {showRoutinesMenu && (
+              <div className="routines-dropdown-menu">
+                <span className="dropdown-title">Elige una Rutina de Práctica:</span>
+                {ROUTINES_CATALOG.map((r) => (
+                  <button
+                    key={r.id}
+                    className={`routine-item-btn ${r.id === activeRoutine.id ? 'selected' : ''}`}
+                    onClick={() => {
+                      onRoutineSelect(r.id);
+                      setShowRoutinesMenu(false);
+                    }}
+                  >
+                    <span className="item-icon">{r.icon}</span>
+                    <div className="item-text">
+                      <strong>{r.title}</strong>
+                      <p>{r.description}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="turn-progress-pill">
+            <Flame size={13} className="flame-icon" />
+            <span>Turno {sessionStats.turnsCompleted} de {sessionStats.targetTurns}</span>
+          </div>
+        </div>
+
+        {/* Métricas de Evaluación Pedagógica */}
+        <div className="eval-scores-group">
+          <div className="score-badge" title="Puntuación de fluidez y cadencia">
+            <span className="score-name">Fluidez:</span>
+            <span className="score-val">{sessionStats.fluencyScore}%</span>
+          </div>
+          <div className="score-badge" title="Variedad y precisión de vocabulario">
+            <span className="score-name">Vocab:</span>
+            <span className="score-val">{sessionStats.vocabScore}%</span>
+          </div>
+          <div className="score-badge" title="Exactitud gramatical y sintáctica">
+            <span className="score-name">Gramática:</span>
+            <span className="score-val">{sessionStats.grammarScore}%</span>
+          </div>
+        </div>
+
+        {/* Línea de progreso de la lección */}
+        <div className="lesson-progress-bar">
+          <div className="progress-fill" style={{ width: `${progressPct}%` }} />
+        </div>
+      </div>
+
+      {/* 3. Cabecera estilo Praktika con Tutor */}
       <div className="praktika-chat-header">
         <div className="tutor-profile-cluster">
           <div className="avatar-ring-container">
@@ -159,14 +336,16 @@ export const ConversationPanel: React.FC<ConversationPanelProps> = ({
 
           <div className="tutor-profile-info">
             <div className="tutor-title-row">
-              <h2 className="tutor-heading">Alistair Vance</h2>
-              <span className="accent-tag">en-GB</span>
-              <span className="ai-tag">Tutor IA</span>
+              <h2 className="tutor-heading">
+                {currentLanguage === 'zh' ? 'Li Wei (李伟)' : 'Alistair Vance'}
+              </h2>
+              <span className="accent-tag">{currentLanguage === 'zh' ? 'zh-CN' : 'en-GB'}</span>
+              <span className="ai-tag">Nivel {currentLevel}</span>
             </div>
             <div className="tutor-status-caption">
-              {tutorStatus === 'idle' && `En espera · ${scenarioTitle}`}
-              {tutorStatus === 'listening' && '👂 Escuchando tu voz...'}
-              {tutorStatus === 'thinking' && '🧠 Pensando respuesta...'}
+              {tutorStatus === 'idle' && `Listo · ${scenarioTitle}`}
+              {tutorStatus === 'listening' && '👂 Escuchando tu voz con paciencia...'}
+              {tutorStatus === 'thinking' && '🧠 Evaluando gramática & preparando feedback...'}
               {tutorStatus === 'speaking' && '🗣️ Hablando en vivo'}
             </div>
           </div>
@@ -186,7 +365,7 @@ export const ConversationPanel: React.FC<ConversationPanelProps> = ({
         </div>
       </div>
 
-      {/* Flujo de Mensajes estilo Praktika */}
+      {/* 4. Flujo de Mensajes estilo Praktika con Traducción en Letras Pequeñas */}
       <div className="praktika-messages-container" role="log" aria-live="polite">
         {messages.map((m) => {
           const isTutor = m.sender === 'tutor';
@@ -211,7 +390,7 @@ export const ConversationPanel: React.FC<ConversationPanelProps> = ({
 
               <div className="msg-content-col">
                 <div className="msg-meta-header">
-                  <span className="msg-author">{isTutor ? 'Alistair' : 'Tú'}</span>
+                  <span className="msg-author">{isTutor ? (currentLanguage === 'zh' ? 'Li Wei' : 'Alistair') : 'Tú'}</span>
                   <span className="msg-time">{m.timestamp}</span>
                   {m.latencyMs && (
                     <span className="msg-latency-badge" title="Latencia Turn-to-Ear">
@@ -221,7 +400,16 @@ export const ConversationPanel: React.FC<ConversationPanelProps> = ({
                 </div>
 
                 <div className={`praktika-msg-bubble ${isTutor ? 'tutor' : 'user'}`}>
+                  {/* Texto principal en el idioma meta */}
                   <p className="bubble-text">{m.text}</p>
+
+                  {/* Traducción simultánea en letras pequeñas debajo de la frase */}
+                  {showTranslations && m.translation && (
+                    <div className="bubble-sub-translation">
+                      <Languages size={11} className="sub-trans-icon" />
+                      <span className="sub-trans-text">{m.translation}</span>
+                    </div>
+                  )}
 
                   {/* Botón de reproducción de voz humana */}
                   {isTutor && (
@@ -241,7 +429,7 @@ export const ConversationPanel: React.FC<ConversationPanelProps> = ({
                     <div className="praktika-inline-correction">
                       <div className="correction-header">
                         <Sparkles size={13} className="correction-icon" />
-                        <span>Sugerencia pedagógica</span>
+                        <span>Sugerencia del Tutor:</span>
                       </div>
                       <div className="correction-body">
                         <span className="strike-text">{m.grammarCorrection.original}</span>
@@ -283,7 +471,7 @@ export const ConversationPanel: React.FC<ConversationPanelProps> = ({
                   <span />
                   <span />
                 </div>
-                <span className="typing-label">Alistair está formulando la respuesta...</span>
+                <span className="typing-label">El tutor está respondiendo...</span>
               </div>
             </div>
           </div>
@@ -303,26 +491,28 @@ export const ConversationPanel: React.FC<ConversationPanelProps> = ({
         </div>
       )}
 
-      {/* Sugerencias contextuales estilo Praktika */}
+      {/* 5. Sugerencias contextuales con traducción en letra pequeña */}
       <div className="praktika-suggestions-tray">
         <span className="tray-label">
-          <HelpCircle size={12} /> Sugerencias de respuesta:
+          <HelpCircle size={12} /> Sugerencias de respuesta ({currentLevel}):
         </span>
         <div className="tray-chips-scroll">
-          {smartSuggestions.map((s, idx) => (
+          {sampleSuggestions.map((s, idx) => (
             <button
               key={idx}
               className="suggestion-chip"
-              onClick={() => onSendMessage(s)}
+              onClick={() => onSendMessage(s.text)}
               disabled={isSimulating}
+              title={s.translation}
             >
-              {s}
+              <span className="chip-main-text">{s.text}</span>
+              {showTranslations && <span className="chip-sub-trans">{s.translation}</span>}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Barra de Entrada de Chat y Micrófono 100% Funcional */}
+      {/* 6. Barra de Entrada de Chat y Micrófono 100% Funcional */}
       <div className="praktika-input-bar">
         <button
           className={`btn-round-mic ${isListeningMic ? 'listening-active' : ''}`}
@@ -342,8 +532,8 @@ export const ConversationPanel: React.FC<ConversationPanelProps> = ({
             className="chat-text-input"
             placeholder={
               isListeningMic
-                ? 'Escuchando tu voz... habla en inglés'
-                : 'Escribe tu respuesta en inglés aquí...'
+                ? currentLanguage === 'zh' ? 'Escuchando tu voz en chino...' : 'Escuchando tu voz... habla en inglés'
+                : currentLanguage === 'zh' ? 'Escribe en pinyin, chino o habla con tu tutor...' : 'Escribe tu respuesta aquí o pulsa el micrófono...'
             }
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
