@@ -78,11 +78,15 @@ export const App: React.FC = () => {
   const facilitator = useRef(TutorFacilitatorService.getInstance());
   const [currentLevel, setCurrentLevel] = useState<LearningLevel>(() => facilitator.current.getLevel());
   const [currentLanguage, setCurrentLanguage] = useState<TargetLanguage>(() => facilitator.current.getLanguage());
+  const [speechRate, setSpeechRate] = useState<number>(() =>
+    facilitator.current.getRecommendedSpeechRate(facilitator.current.getLevel())
+  );
   const [sessionStats, setSessionStats] = useState(() => {
     const r = facilitator.current.getActiveRoutine();
     return {
       turnsCompleted: 0,
       targetTurns: r.targetTurns,
+      phaseName: facilitator.current.getCurrentPhaseName(),
       fluencyScore: 82,
       vocabScore: 80,
       grammarScore: 86,
@@ -96,8 +100,8 @@ export const App: React.FC = () => {
     {
       id: 'init-1',
       sender: 'tutor',
-      text: "Welcome to your interactive session! I'm Alistair, your AI tutor. Tell me, what topic would you like to explore today?",
-      translation: "¡Bienvenido a tu sesión interactiva! Soy Alistair, tu tutor IA. Cuéntame, ¿qué tema te gustaría explorar hoy?",
+      text: "Hello! I am Alistair. What is your name?",
+      translation: "¡Hola! Soy Alistair. ¿Cómo te llamas?",
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     },
   ]);
@@ -124,10 +128,13 @@ export const App: React.FC = () => {
   const handleLevelChange = (lvl: LearningLevel) => {
     setCurrentLevel(lvl);
     facilitator.current.setLevel(lvl);
+    const recRate = facilitator.current.getRecommendedSpeechRate(lvl);
+    setSpeechRate(recRate);
     const r = facilitator.current.getActiveRoutine();
     setSessionStats({
       turnsCompleted: 0,
       targetTurns: r.targetTurns,
+      phaseName: facilitator.current.getCurrentPhaseName(),
       fluencyScore: 80,
       vocabScore: 78,
       grammarScore: 82,
@@ -148,9 +155,11 @@ export const App: React.FC = () => {
     facilitator.current.setLanguage(lang);
     const r = facilitator.current.getActiveRoutine();
     setCurrentLevel(r.level);
+    setSpeechRate(facilitator.current.getRecommendedSpeechRate(r.level));
     setSessionStats({
       turnsCompleted: 0,
       targetTurns: r.targetTurns,
+      phaseName: facilitator.current.getCurrentPhaseName(),
       fluencyScore: 80,
       vocabScore: 78,
       grammarScore: 82,
@@ -170,9 +179,11 @@ export const App: React.FC = () => {
     const r = facilitator.current.setRoutine(routineId);
     setCurrentLevel(r.level);
     setCurrentLanguage(r.language);
+    setSpeechRate(facilitator.current.getRecommendedSpeechRate(r.level));
     setSessionStats({
       turnsCompleted: 0,
       targetTurns: r.targetTurns,
+      phaseName: facilitator.current.getCurrentPhaseName(),
       fluencyScore: 82,
       vocabScore: 80,
       grammarScore: 85,
@@ -307,9 +318,9 @@ export const App: React.FC = () => {
             observedTtftMs = ttft;
             setIsSimulating(false);
 
-            // Hablar respuesta con voz humana real del navegador
+            // Hablar respuesta con voz humana real del navegador con velocidad calibrada
             const voiceLang = currentLanguage === 'zh' ? 'zh-CN' : 'en-GB';
-            ttsService.current.speakText(accumulatedTutorText, voiceLang).catch(() => {});
+            ttsService.current.speakText(accumulatedTutorText, voiceLang, speechRate).catch(() => {});
 
             // Calcular desglose final de latencia
             const t4 = observedTtftMs;
@@ -525,8 +536,10 @@ export const App: React.FC = () => {
               scenarioTitle={activeRoleplay?.scenario.title || facilitator.current.getActiveRoutine().title}
               currentLevel={currentLevel}
               currentLanguage={currentLanguage}
+              speechRate={speechRate}
               onLevelChange={handleLevelChange}
               onLanguageChange={handleLanguageChange}
+              onSpeechRateChange={setSpeechRate}
               onRoutineSelect={handleRoutineSelect}
               sessionStats={sessionStats}
             />

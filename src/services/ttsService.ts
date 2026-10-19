@@ -59,9 +59,9 @@ export class TtsService {
 
   /**
    * Sintetiza y pronuncia texto usando la voz humana del navegador (Web Speech Synthesis).
-   * Selecciona prioritariamente voces británicas o americanas naturales para el tutor.
+   * Permite configurar la velocidad (rate) para hablar más pausado en niveles básicos (A1/A2).
    */
-  public async speakText(text: string, lang = 'en-GB'): Promise<void> {
+  public async speakText(text: string, lang = 'en-GB', rate = 0.95): Promise<void> {
     if (typeof window === 'undefined' || !window.speechSynthesis) return;
 
     this.abortPlayback();
@@ -69,14 +69,21 @@ export class TtsService {
     return new Promise((resolve) => {
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = lang;
-      utterance.rate = 0.95; // Cadencia natural de tutor
+      // Velocidad configurable: 0.7x (muy pausado A1) a 1.25x (avanzado)
+      utterance.rate = Math.max(0.6, Math.min(1.4, rate));
       utterance.pitch = 1.0;
 
-      // Buscar voz adecuada en inglés
+      // Buscar voz adecuada según el idioma meta
       const voices = window.speechSynthesis.getVoices();
-      const preferredVoice = voices.find(
-        (v) => (v.lang.startsWith('en-GB') || v.lang.startsWith('en-US')) && !v.name.includes('Google')
-      ) || voices.find((v) => v.lang.startsWith('en')) || voices[0];
+      let preferredVoice: SpeechSynthesisVoice | undefined;
+
+      if (lang.startsWith('zh')) {
+        preferredVoice = voices.find((v) => v.lang.startsWith('zh')) || voices[0];
+      } else {
+        preferredVoice = voices.find(
+          (v) => (v.lang.startsWith('en-GB') || v.lang.startsWith('en-US')) && !v.name.includes('Google')
+        ) || voices.find((v) => v.lang.startsWith('en')) || voices[0];
+      }
 
       if (preferredVoice) {
         utterance.voice = preferredVoice;
