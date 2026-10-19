@@ -1,0 +1,651 @@
+{
+  "version": "2.0.0",
+  "name": "Ground Truth Phonetic Benchmark Dataset",
+  "description": "20 casos de prueba calibrados para validación del Spike Fonético (Inglés y Mandarín con contornos F0)",
+  "cases": [
+    {
+      "id": "tc-01-v-b-substitution",
+      "category": "consonant-voicing",
+      "language": "en-US",
+      "targetWord": "very",
+      "targetPhonemes": [
+        "/v/",
+        "/ɛ/",
+        "/r/",
+        "/i/"
+      ],
+      "simulatedUtterance": "berry",
+      "actualPhonemes": [
+        "/b/",
+        "/ɛ/",
+        "/r/",
+        "/i/"
+      ],
+      "errorType": "substitution",
+      "failingPhonemeIndex": 0,
+      "failingPhoneme": "/v/",
+      "substitutedBy": "/b/",
+      "timeRangeMs": [
+        20,
+        140
+      ],
+      "phonemeTargetScores": [
+        28,
+        92,
+        88,
+        95
+      ],
+      "diagnostic": "Fricativa labiodental /v/ pronunciada como oclusiva bilabial /b/ (sin fricción continua).",
+      "audioPath": "/benchmarks/phonetic_dataset/audio/tc-01-v-b-substitution.wav"
+    },
+    {
+      "id": "tc-02-th-t-substitution",
+      "category": "dental-fricative",
+      "language": "en-GB",
+      "targetWord": "think",
+      "targetPhonemes": [
+        "/θ/",
+        "/ɪ/",
+        "/ŋ/",
+        "/k/"
+      ],
+      "simulatedUtterance": "tink",
+      "actualPhonemes": [
+        "/t/",
+        "/ɪ/",
+        "/ŋ/",
+        "/k/"
+      ],
+      "errorType": "substitution",
+      "failingPhonemeIndex": 0,
+      "failingPhoneme": "/θ/",
+      "substitutedBy": "/t/",
+      "timeRangeMs": [
+        15,
+        120
+      ],
+      "phonemeTargetScores": [
+        32,
+        94,
+        90,
+        89
+      ],
+      "diagnostic": "Fricativa dental sorda /θ/ pronunciada como oclusiva alveolar /t/.",
+      "audioPath": "/benchmarks/phonetic_dataset/audio/tc-02-th-t-substitution.wav"
+    },
+    {
+      "id": "tc-03-th-s-substitution",
+      "category": "dental-fricative",
+      "language": "en-US",
+      "targetWord": "bath",
+      "targetPhonemes": [
+        "/b/",
+        "/æ/",
+        "/θ/"
+      ],
+      "simulatedUtterance": "bass",
+      "actualPhonemes": [
+        "/b/",
+        "/æ/",
+        "/s/"
+      ],
+      "errorType": "substitution",
+      "failingPhonemeIndex": 2,
+      "failingPhoneme": "/θ/",
+      "substitutedBy": "/s/",
+      "timeRangeMs": [
+        210,
+        340
+      ],
+      "phonemeTargetScores": [
+        92,
+        90,
+        35
+      ],
+      "diagnostic": "Sustitución de /θ/ por sibilante alveolar /s/ (fricción en crestas alveolares en vez de interdental).",
+      "audioPath": "/benchmarks/phonetic_dataset/audio/tc-03-th-s-substitution.wav"
+    },
+    {
+      "id": "tc-04-vowel-epenthesis-speak",
+      "category": "epenthesis",
+      "language": "en-US",
+      "targetWord": "speak",
+      "targetPhonemes": [
+        "/s/",
+        "/p/",
+        "/iː/",
+        "/k/"
+      ],
+      "simulatedUtterance": "es-peak",
+      "actualPhonemes": [
+        "/e/",
+        "/s/",
+        "/p/",
+        "/iː/",
+        "/k/"
+      ],
+      "errorType": "insertion",
+      "failingPhonemeIndex": 0,
+      "failingPhoneme": "/s/",
+      "insertedPhoneme": "/e/",
+      "timeRangeMs": [
+        0,
+        80
+      ],
+      "phonemeTargetScores": [
+        40,
+        88,
+        93,
+        91
+      ],
+      "diagnostic": "Vocal protética /e/ añadida antes del grupo consonántico /sp/.",
+      "audioPath": "/benchmarks/phonetic_dataset/audio/tc-04-vowel-epenthesis-speak.wav"
+    },
+    {
+      "id": "tc-05-vowel-epenthesis-start",
+      "category": "epenthesis",
+      "language": "en-US",
+      "targetWord": "start",
+      "targetPhonemes": [
+        "/s/",
+        "/t/",
+        "/ɑːr/",
+        "/t/"
+      ],
+      "simulatedUtterance": "es-tart",
+      "actualPhonemes": [
+        "/e/",
+        "/s/",
+        "/t/",
+        "/ɑːr/",
+        "/t/"
+      ],
+      "errorType": "insertion",
+      "failingPhonemeIndex": 0,
+      "failingPhoneme": "/s/",
+      "insertedPhoneme": "/e/",
+      "timeRangeMs": [
+        0,
+        85
+      ],
+      "phonemeTargetScores": [
+        38,
+        89,
+        90,
+        88
+      ],
+      "diagnostic": "Inserción de vocal de apoyo /e/ antes de /st/ inicial.",
+      "audioPath": "/benchmarks/phonetic_dataset/audio/tc-05-vowel-epenthesis-start.wav"
+    },
+    {
+      "id": "tc-06-vowel-lax-tense-ship",
+      "category": "vowel-quality",
+      "language": "en-GB",
+      "targetWord": "ship",
+      "targetPhonemes": [
+        "/ʃ/",
+        "/ɪ/",
+        "/p/"
+      ],
+      "simulatedUtterance": "sheep",
+      "actualPhonemes": [
+        "/ʃ/",
+        "/iː/",
+        "/p/"
+      ],
+      "errorType": "vowel-length-quality",
+      "failingPhonemeIndex": 1,
+      "failingPhoneme": "/ɪ/",
+      "substitutedBy": "/iː/",
+      "timeRangeMs": [
+        110,
+        260
+      ],
+      "phonemeTargetScores": [
+        92,
+        38,
+        94
+      ],
+      "diagnostic": "Vocal corta y laxa /ɪ/ articulada como vocal larga y tensa /iː/ (exceso de duración y formante F1 demasiado bajo).",
+      "audioPath": "/benchmarks/phonetic_dataset/audio/tc-06-vowel-lax-tense-ship.wav"
+    },
+    {
+      "id": "tc-07-vowel-lax-tense-beach",
+      "category": "vowel-quality",
+      "language": "en-US",
+      "targetWord": "beach",
+      "targetPhonemes": [
+        "/b/",
+        "/iː/",
+        "/tʃ/"
+      ],
+      "simulatedUtterance": "bitch",
+      "actualPhonemes": [
+        "/b/",
+        "/ɪ/",
+        "/tʃ/"
+      ],
+      "errorType": "vowel-length-quality",
+      "failingPhonemeIndex": 1,
+      "failingPhoneme": "/iː/",
+      "substitutedBy": "/ɪ/",
+      "timeRangeMs": [
+        80,
+        180
+      ],
+      "phonemeTargetScores": [
+        90,
+        42,
+        89
+      ],
+      "diagnostic": "Vocal tensa /iː/ acortada a /ɪ/ laxa; riesgo de malentendido semántico grave.",
+      "audioPath": "/benchmarks/phonetic_dataset/audio/tc-07-vowel-lax-tense-beach.wav"
+    },
+    {
+      "id": "tc-08-schwa-reduction-comfortable",
+      "category": "schwa-reduction",
+      "language": "en-GB",
+      "targetWord": "comfortable",
+      "targetPhonemes": [
+        "/kʌm/",
+        "/fər/",
+        "/tə/",
+        "/bəl/"
+      ],
+      "simulatedUtterance": "com-for-ta-ble (4 sílabas completas sin reducción)",
+      "actualPhonemes": [
+        "/kɒm/",
+        "/fɔːr/",
+        "/teɪ/",
+        "/bəl/"
+      ],
+      "errorType": "failure-to-reduce",
+      "failingPhonemeIndex": 1,
+      "failingPhoneme": "/fər/",
+      "timeRangeMs": [
+        140,
+        280
+      ],
+      "phonemeTargetScores": [
+        85,
+        34,
+        45,
+        88
+      ],
+      "diagnostic": "Falta de reducción vocálica a schwa /ə/; pronunciación ortográfica de sílabas átonas.",
+      "audioPath": "/benchmarks/phonetic_dataset/audio/tc-08-schwa-reduction-comfortable.wav"
+    },
+    {
+      "id": "tc-09-schwa-reduction-vegetable",
+      "category": "schwa-reduction",
+      "language": "en-US",
+      "targetWord": "vegetable",
+      "targetPhonemes": [
+        "/vɛdʒ/",
+        "/tə/",
+        "/bəl/"
+      ],
+      "simulatedUtterance": "ve-ge-ta-ble (deglución silábica omitida)",
+      "actualPhonemes": [
+        "/vɛ/",
+        "/dʒeɪ/",
+        "/teɪ/",
+        "/bəl/"
+      ],
+      "errorType": "failure-to-reduce",
+      "failingPhonemeIndex": 1,
+      "failingPhoneme": "/dʒ/",
+      "timeRangeMs": [
+        120,
+        250
+      ],
+      "phonemeTargetScores": [
+        88,
+        41,
+        50,
+        92
+      ],
+      "diagnostic": "Articulación hipercorrecta de cuatro sílabas en lugar del síncope canónico de tres sílabas /vɛdʒ.tə.bəl/.",
+      "audioPath": "/benchmarks/phonetic_dataset/audio/tc-09-schwa-reduction-vegetable.wav"
+    },
+    {
+      "id": "tc-10-past-tense-ed-asked",
+      "category": "morphophonology",
+      "language": "en-US",
+      "targetWord": "asked",
+      "targetPhonemes": [
+        "/æ/",
+        "/s/",
+        "/k/",
+        "/t/"
+      ],
+      "simulatedUtterance": "ask-ed (con vocal /ɪd/ extra)",
+      "actualPhonemes": [
+        "/æ/",
+        "/s/",
+        "/k/",
+        "/ɪ/",
+        "/d/"
+      ],
+      "errorType": "insertion",
+      "failingPhonemeIndex": 3,
+      "failingPhoneme": "/t/",
+      "insertedPhoneme": "/ɪd/",
+      "timeRangeMs": [
+        260,
+        390
+      ],
+      "phonemeTargetScores": [
+        92,
+        94,
+        91,
+        36
+      ],
+      "diagnostic": "Sufijo de pasado -ed pronunciado como sílaba completa /ɪd/ tras consonante sorda /k/ en vez de /t/.",
+      "audioPath": "/benchmarks/phonetic_dataset/audio/tc-10-past-tense-ed-asked.wav"
+    },
+    {
+      "id": "tc-11-past-tense-ed-worked",
+      "category": "morphophonology",
+      "language": "en-GB",
+      "targetWord": "worked",
+      "targetPhonemes": [
+        "/wɜː/",
+        "/k/",
+        "/t/"
+      ],
+      "simulatedUtterance": "work-ed",
+      "actualPhonemes": [
+        "/wɜː/",
+        "/k/",
+        "/e/",
+        "/d/"
+      ],
+      "errorType": "insertion",
+      "failingPhonemeIndex": 2,
+      "failingPhoneme": "/t/",
+      "timeRangeMs": [
+        230,
+        360
+      ],
+      "phonemeTargetScores": [
+        90,
+        89,
+        39
+      ],
+      "diagnostic": "Pronunciación de -ed como /ed/ silábico en lugar de la oclusiva sorda /t/.",
+      "audioPath": "/benchmarks/phonetic_dataset/audio/tc-11-past-tense-ed-worked.wav"
+    },
+    {
+      "id": "tc-12-rhotic-liquid-right-light",
+      "category": "liquid-distinction",
+      "language": "en-US",
+      "targetWord": "right",
+      "targetPhonemes": [
+        "/r/",
+        "/aɪ/",
+        "/t/"
+      ],
+      "simulatedUtterance": "light",
+      "actualPhonemes": [
+        "/l/",
+        "/aɪ/",
+        "/t/"
+      ],
+      "errorType": "substitution",
+      "failingPhonemeIndex": 0,
+      "failingPhoneme": "/r/",
+      "substitutedBy": "/l/",
+      "timeRangeMs": [
+        10,
+        110
+      ],
+      "phonemeTargetScores": [
+        31,
+        93,
+        92
+      ],
+      "diagnostic": "Aproximante retrofleja /r/ (F3 muy bajo) sustituida por lateral alveolar /l/ (F3 alto y contacto lingual).",
+      "audioPath": "/benchmarks/phonetic_dataset/audio/tc-12-rhotic-liquid-right-light.wav"
+    },
+    {
+      "id": "tc-13-affricate-voicing-job",
+      "category": "affricate",
+      "language": "en-GB",
+      "targetWord": "job",
+      "targetPhonemes": [
+        "/dʒ/",
+        "/ɒ/",
+        "/b/"
+      ],
+      "simulatedUtterance": "yob (/j/ aproximante palatal)",
+      "actualPhonemes": [
+        "/j/",
+        "/ɒ/",
+        "/b/"
+      ],
+      "errorType": "substitution",
+      "failingPhonemeIndex": 0,
+      "failingPhoneme": "/dʒ/",
+      "substitutedBy": "/j/",
+      "timeRangeMs": [
+        10,
+        130
+      ],
+      "phonemeTargetScores": [
+        33,
+        91,
+        89
+      ],
+      "diagnostic": "Africada sonora /dʒ/ pronunciada como semivocal /j/ (sin oclusión alveolar previa).",
+      "audioPath": "/benchmarks/phonetic_dataset/audio/tc-13-affricate-voicing-job.wav"
+    },
+    {
+      "id": "tc-14-affricate-devoicing-judge",
+      "category": "affricate",
+      "language": "en-US",
+      "targetWord": "judge",
+      "targetPhonemes": [
+        "/dʒ/",
+        "/ʌ/",
+        "/dʒ/"
+      ],
+      "simulatedUtterance": "chuch (/tʃ/ sorda)",
+      "actualPhonemes": [
+        "/tʃ/",
+        "/ʌ/",
+        "/tʃ/"
+      ],
+      "errorType": "devoicing",
+      "failingPhonemeIndex": 0,
+      "failingPhoneme": "/dʒ/",
+      "substitutedBy": "/tʃ/",
+      "timeRangeMs": [
+        15,
+        120
+      ],
+      "phonemeTargetScores": [
+        45,
+        92,
+        48
+      ],
+      "diagnostic": "Desonorización completa de /dʒ/ a /tʃ/ en posición inicial y final.",
+      "audioPath": "/benchmarks/phonetic_dataset/audio/tc-14-affricate-devoicing-judge.wav"
+    },
+    {
+      "id": "tc-15-mandarin-tone1-to-tone4",
+      "category": "mandarin-pitch-contour",
+      "language": "zh-CN",
+      "targetWord": "mā (妈 - Madre)",
+      "targetPhonemes": [
+        "/m/",
+        "/a/"
+      ],
+      "targetTone": 1,
+      "targetPitchContour": "flat-high-55",
+      "simulatedUtterance": "mà (骂 - Regañar / Insultar)",
+      "simulatedTone": 4,
+      "simulatedPitchContour": "falling-abrupt-51",
+      "errorType": "pitch-contour-deviation",
+      "failingPhonemeIndex": 1,
+      "failingPhoneme": "/a/ [Tono 1]",
+      "timeRangeMs": [
+        60,
+        320
+      ],
+      "phonemeTargetScores": [
+        95,
+        25
+      ],
+      "f0ErrorSemitones": 6.8,
+      "diagnostic": "Desviación tonal crítica: Tono 1 alto plano (55, ~250Hz sostenido) emitido como Tono 4 descendente (51, caída abrupta de 260Hz a 140Hz). Cambio semántico total (Madre -> Regañar).",
+      "audioPath": "/benchmarks/phonetic_dataset/audio/tc-15-mandarin-tone1-to-tone4.wav"
+    },
+    {
+      "id": "tc-16-mandarin-tone2-to-tone3",
+      "category": "mandarin-pitch-contour",
+      "language": "zh-CN",
+      "targetWord": "shí (十 - Diez)",
+      "targetPhonemes": [
+        "/ʂ/",
+        "/ɨ/"
+      ],
+      "targetTone": 2,
+      "targetPitchContour": "rising-35",
+      "simulatedUtterance": "shǐ (屎 - Excremento)",
+      "simulatedTone": 3,
+      "simulatedPitchContour": "dipping-214",
+      "errorType": "pitch-contour-deviation",
+      "failingPhonemeIndex": 1,
+      "failingPhoneme": "/ɨ/ [Tono 2]",
+      "timeRangeMs": [
+        80,
+        340
+      ],
+      "phonemeTargetScores": [
+        90,
+        30
+      ],
+      "f0ErrorSemitones": 5.4,
+      "diagnostic": "Tono 2 ascendente medio (35) pronunciado con curva descendente-ascendente (214). Error socialmente embarazoso.",
+      "audioPath": "/benchmarks/phonetic_dataset/audio/tc-16-mandarin-tone2-to-tone3.wav"
+    },
+    {
+      "id": "tc-17-mandarin-tone3-to-tone1",
+      "category": "mandarin-pitch-contour",
+      "language": "zh-CN",
+      "targetWord": "hǎo (好 - Bueno)",
+      "targetPhonemes": [
+        "/x/",
+        "/aʊ/"
+      ],
+      "targetTone": 3,
+      "targetPitchContour": "dipping-214",
+      "simulatedUtterance": "hāo (Tono 1 plano)",
+      "simulatedTone": 1,
+      "simulatedPitchContour": "flat-high-55",
+      "errorType": "pitch-contour-deviation",
+      "failingPhonemeIndex": 1,
+      "failingPhoneme": "/aʊ/ [Tono 3]",
+      "timeRangeMs": [
+        70,
+        350
+      ],
+      "phonemeTargetScores": [
+        92,
+        36
+      ],
+      "f0ErrorSemitones": 4.9,
+      "diagnostic": "Omisión del descenso característico de Tono 3; mantenido en registro alto plano.",
+      "audioPath": "/benchmarks/phonetic_dataset/audio/tc-17-mandarin-tone3-to-tone1.wav"
+    },
+    {
+      "id": "tc-18-mandarin-retroflex-zhi-zi",
+      "category": "retroflex-vs-dental",
+      "language": "zh-CN",
+      "targetWord": "zhī (知 - Saber)",
+      "targetPhonemes": [
+        "/ʈʂ/",
+        "/ɨ/"
+      ],
+      "targetTone": 1,
+      "simulatedUtterance": "zī (资 - Capital)",
+      "actualPhonemes": [
+        "/ts/",
+        "/z̩/"
+      ],
+      "errorType": "substitution",
+      "failingPhonemeIndex": 0,
+      "failingPhoneme": "/ʈʂ/",
+      "substitutedBy": "/ts/",
+      "timeRangeMs": [
+        15,
+        140
+      ],
+      "phonemeTargetScores": [
+        38,
+        92
+      ],
+      "diagnostic": "Consonante africada retrofleja /ʈʂ/ sustituida por dental sibilante /ts/ (falta de curvatura lingual hacia el paladar duro).",
+      "audioPath": "/benchmarks/phonetic_dataset/audio/tc-18-mandarin-retroflex-zhi-zi.wav"
+    },
+    {
+      "id": "tc-19-mandarin-aspirated-chi-ci",
+      "category": "retroflex-vs-dental",
+      "language": "zh-CN",
+      "targetWord": "chī (吃 - Comer)",
+      "targetPhonemes": [
+        "/ʈʂʰ/",
+        "/ɨ/"
+      ],
+      "targetTone": 1,
+      "simulatedUtterance": "cī (疵 - Defecto)",
+      "actualPhonemes": [
+        "/tsʰ/",
+        "/z̩/"
+      ],
+      "errorType": "substitution",
+      "failingPhonemeIndex": 0,
+      "failingPhoneme": "/ʈʂʰ/",
+      "substitutedBy": "/tsʰ/",
+      "timeRangeMs": [
+        15,
+        150
+      ],
+      "phonemeTargetScores": [
+        42,
+        94
+      ],
+      "diagnostic": "Falta de posición retrofleja en la africada aspirada /ʈʂʰ/.",
+      "audioPath": "/benchmarks/phonetic_dataset/audio/tc-19-mandarin-aspirated-chi-ci.wav"
+    },
+    {
+      "id": "tc-20-mandarin-neutral-tone-de",
+      "category": "neutral-tone",
+      "language": "zh-CN",
+      "targetWord": "de (的 - Partícula posesiva)",
+      "targetPhonemes": [
+        "/d/",
+        "/ə/"
+      ],
+      "targetTone": 5,
+      "targetPitchContour": "short-neutral",
+      "simulatedUtterance": "dé (Tono 2 sostenido y largo)",
+      "simulatedTone": 2,
+      "simulatedPitchContour": "rising-35-long",
+      "errorType": "duration-intensity-pitch",
+      "failingPhonemeIndex": 1,
+      "failingPhoneme": "/ə/ [Neutro]",
+      "timeRangeMs": [
+        40,
+        240
+      ],
+      "phonemeTargetScores": [
+        92,
+        45
+      ],
+      "diagnostic": "Tono neutro ligero y ultracorto (<100ms) pronunciado con alargamiento excesivo y curva tonal del segundo tono.",
+      "audioPath": "/benchmarks/phonetic_dataset/audio/tc-20-mandarin-neutral-tone-de.wav"
+    }
+  ]
+}
