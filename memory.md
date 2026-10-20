@@ -5,7 +5,16 @@
 ---
 
 ## 1. Resumen Ejecutivo y Estado Actual
-**MyPolyGloty OS** ha alcanzado el hito de **Producción y Pruebas de Campo**.
+**MyPolyGloty OS** ha completado la **Alineación con Supabase Seguro v2** y se encuentra en **Pausa de Auditoría**.
+
+> [!NOTE]
+> **Estado de la Sesión Actual (20-oct-2026):**
+> - Se completaron todas las tareas de la Instrucción 1 en la rama `fix/supabase-secure-alignment`.
+> - **CERO merge ni push a `main`** para proteger el auto-deploy de Render a testers.
+> - Se generó y guardó el informe de entrega formal en [`INFORME_ALINEACION_SUPABASE_V2.md`](file:///c:/Users/rolan/Downloads/POlyGloty%20OS/INFORME_ALINEACION_SUPABASE_V2.md).
+> - Se encuentra abierta la solicitud de Pull Request para revisión del auditor senior.
+> - **Pausa activa:** Esperando revisión y visto bueno del auditor senior para proceder con la fusión y el despliegue.
+
 > [!IMPORTANT]
 > **Historial de Base de Datos**: Las tablas en la nube de Supabase se crearon y configuraron formalmente el **20 de octubre de 2026**. Con anterioridad a esta fecha, la aplicación operaba exclusivamente en **modo Local-First** (`localStorage`).
 
@@ -17,6 +26,7 @@ El sistema cuenta con:
 5. **Métricas de Avance y Progreso** (Racha de días 🔥, XP acumulado, turnos completados, desglose de fluidez, vocabulario y gramática).
 6. **Memoria Continua del Tutor** (`user_memory`): Detección automática de hechos e intereses del alumno y saludos dinámicos personalizados con categorías validadas.
 7. Despliegue continuo en la nube (GitHub + Render + Supabase).
+8. **Suite de pruebas de alineación 5/5 superada** (`scripts/verify_supabase_alignment.ts`).
 
 ---
 
@@ -127,3 +137,16 @@ Al iniciar sesión exitosamente con Supabase Auth, se aplica la siguiente polít
   - Garantía de cero peticiones a `supabase.co/rest/v1` en modo sin sesión (Local-First).
   - Normalización estricta de categorías de memoria a: `fact`, `interest`, `weakness`, `goal`, `preference`.
   - Uso de `crypto.randomUUID()` para generación de IDs de tarjetas FSRS y diagnósticos CEFR.
+
+---
+
+## 7. Pendientes para la Próxima Sesión
+1. **Revisión del Auditor Senior**:
+   - Analizar el feedback y observaciones sobre [`INFORME_ALINEACION_SUPABASE_V2.md`](file:///c:/Users/rolan/Downloads/POlyGloty%20OS/INFORME_ALINEACION_SUPABASE_V2.md).
+   - Aplicar posibles ajustes solicitados por la auditoría si fuesen requeridos.
+2. **Merge del Pull Request hacia `main`**:
+   - Una vez aprobado el PR por el auditor/director, fusionar `fix/supabase-secure-alignment` a `main`.
+   - Verificar el despliegue automático en Render Cloud Hosting.
+3. **Pruebas de Campo con Testers**:
+   - Verificación en vivo de flujos de registro, login, persistencia y memoria continua en la URL de producción (`https://mypolygloty-os.onrender.com/`).
+
