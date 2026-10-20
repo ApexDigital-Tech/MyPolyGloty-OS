@@ -92,3 +92,17 @@
    - Reforzar el catálogo de ejercicios prácticos guiados para los niveles B1 a C1.
 3. **Validación de Supabase en Producción**:
    - Confirmar sincronización en vivo de usuarios creados en Render con el panel de Supabase.
+
+---
+
+## 7. Registro de Cambios Recientes (20 de octubre de 2026)
+- **Pantalla Independiente de Autenticación (`AuthScreen.tsx`)**:
+  - Separación de Login y Registro en pantallas independientes con diseño profesional split-screen (Showcase Pedagógico a la izquierda + Formulario de alta fidelidad a la derecha).
+  - Selector de idioma preferido (🇨🇳 Chino / 🇬🇧 Inglés) y nivel CEFR inicial (A1 a C2) en el registro.
+  - Botón para alternar visibilidad de contraseña (`Eye` / `EyeOff`), modo "Recordarme", y estado en vivo de Supabase Cloud vs Local-First.
+  - Enlaces directos para conmutar entre Login y Registro sin solapamientos.
+- **Corrección de Desalineación en Modales & Perfil**:
+  - Implementación de `.modal-backdrop-overlay` con `position: fixed`, desenfoque de fondo (`backdrop-filter: blur(10px)`), `z-index: 99999` y centrado flex absoluto tanto horizontal como vertical.
+  - Reestructuración de `.profile-modal-card` para garantizar alineación centrada y fluida en cualquier resolución sin recortes al pie de página.
+- **Acciones en Cabecera**:
+  - En lugar de un botón genérico "Entrar / Registro", la barra de navegación expone accesos directos dedicados: `Iniciar Sesión` y `Crear Cuenta`.

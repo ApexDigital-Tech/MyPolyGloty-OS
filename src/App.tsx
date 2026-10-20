@@ -23,7 +23,7 @@ import {
   type TargetLanguage,
 } from './services/tutorFacilitatorService';
 import { AuthService, type UserProfile } from './services/authService';
-import { AuthModal } from './components/AuthModal';
+import { AuthScreen } from './components/AuthScreen';
 import { UserProfileModal } from './components/UserProfileModal';
 import {
   MessageSquare,
@@ -41,6 +41,7 @@ import {
   X,
   Volume2,
   LogIn,
+  UserPlus,
   User,
 } from 'lucide-react';
 
@@ -83,7 +84,8 @@ export const App: React.FC = () => {
   const facilitator = useRef(TutorFacilitatorService.getInstance());
   const authService = useRef(AuthService.getInstance());
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => authService.current.getCurrentUser());
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
+  const [isAuthScreenOpen, setIsAuthScreenOpen] = useState<boolean>(false);
+  const [authScreenMode, setAuthScreenMode] = useState<'login' | 'register'>('login');
   const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
 
   const [currentLevel, setCurrentLevel] = useState<LearningLevel>(() => facilitator.current.getLevel());
@@ -509,14 +511,32 @@ export const App: React.FC = () => {
               <span className="user-level-tag">{currentUser.currentLevel}</span>
             </button>
           ) : (
-            <button
-              className="btn-login-trigger"
-              onClick={() => setIsAuthModalOpen(true)}
-              title="Iniciar sesión o crear cuenta para guardar tu avance y memoria del tutor"
-            >
-              <LogIn size={15} />
-              <span className="login-btn-text">Entrar / Registro</span>
-            </button>
+            <div className="navbar-auth-group">
+              <button
+                type="button"
+                className="btn-nav-login"
+                onClick={() => {
+                  setAuthScreenMode('login');
+                  setIsAuthScreenOpen(true);
+                }}
+                title="Iniciar sesión en tu cuenta"
+              >
+                <LogIn size={14} />
+                <span>Iniciar Sesión</span>
+              </button>
+              <button
+                type="button"
+                className="btn-nav-register"
+                onClick={() => {
+                  setAuthScreenMode('register');
+                  setIsAuthScreenOpen(true);
+                }}
+                title="Crear cuenta nueva gratis"
+              >
+                <UserPlus size={14} />
+                <span>Crear Cuenta</span>
+              </button>
+            </div>
           )}
 
           {/* Toggle Modo Claro / Oscuro */}
@@ -726,21 +746,25 @@ export const App: React.FC = () => {
         onClose={() => setIsOfflineModalOpen(false)}
       />
 
-      {/* Modales de Autenticación, Registro y Perfil */}
-      <AuthModal
-        isOpen={isAuthModalOpen}
-        onClose={() => setIsAuthModalOpen(false)}
-        onAuthSuccess={() => {
-          setIsAuthModalOpen(false);
+      {/* Pantalla Independiente de Autenticación (Login / Registro Profesional) */}
+      <AuthScreen
+        isOpen={isAuthScreenOpen}
+        initialMode={authScreenMode}
+        onClose={() => setIsAuthScreenOpen(false)}
+        onAuthSuccess={(user) => {
+          setCurrentUser(user);
+          setIsAuthScreenOpen(false);
           setIsProfileModalOpen(true);
         }}
       />
 
+      {/* Modal de Perfil de Usuario y Progreso (Alineado y Centrado) */}
       <UserProfileModal
         isOpen={isProfileModalOpen}
         onClose={() => setIsProfileModalOpen(false)}
         onLogout={() => {
           authService.current.signOut();
+          setCurrentUser(null);
           setIsProfileModalOpen(false);
         }}
       />
