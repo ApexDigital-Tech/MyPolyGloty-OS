@@ -95,7 +95,9 @@ export class FSRSScheduler {
     }
 
     const newCard: FSRSCard = {
-      id: `card_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+      id: typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `card_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
       item: options.item,
       targetLang: options.targetLang,
       type: options.type,

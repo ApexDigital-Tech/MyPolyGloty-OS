@@ -1,12 +1,23 @@
 /**
- * AuthService - Gestión de Autenticación, Usuarios y Sesiones
+ * AuthService - Gestión de Autenticación, Usuarios y Sincronización Segura
  * MyPolyGloty OS - Capa de Usuario y Cloud Sync
  * 
- * Funcionalidades:
- * 1. Registro (Sign Up) e Inicio de Sesión (Sign In) con Supabase Auth.
- * 2. Soporte Resiliente Local-First (Offline / Guest): Si Supabase no tiene anon key o está offline,
- *    almacena usuarios y progreso en localStorage sin interrumpir la experiencia.
- * 3. Gestión de estado de sesión global y persistencia entre recargas.
+ * Reglas de Arquitectura Segura v2 (20 de octubre de 2026):
+ * 1. RLS Restringido: Solo rol 'authenticated'. El rol 'anon' no tiene permisos de lectura ni escritura.
+ * 2. Cero llamadas HTTP a Supabase sin sesión activa (Local-First).
+ * 3. Inserción delegada al trigger `on_auth_user_created` en Supabase: signUp envía options.data
+ *    y NUNCA ejecuta inserts manuales a 'profiles' ni a 'user_progress'.
+ * 4. Categorías de memoria del tutor estrictamente limitadas a:
+ *    'fact', 'interest', 'weakness', 'goal', 'preference'.
+ * 
+ * REGLA DE SINCRONIZACIÓN DOCUMENTADA (Local -> Nube):
+ * - Perfil ('profiles'): La nube es la fuente de verdad (Cloud-Master). Se descargan los datos
+ *   remotos de la base de datos y se actualiza el caché de localStorage.
+ * - Progreso ('user_progress'): Unión con selección del valor máximo (Max-Accumulative).
+ *   streak_days = max(local, remote), total_xp = max(local, remote), total_turns = max(local, remote),
+ *   total_lessons = max(local, remote). Si el avance offline supera al remoto, se actualiza la nube.
+ * - Memoria ('user_memory'): Unión aditiva deduplicada por 'key_phrase'. Las memorias locales
+ *   nuevas se insertan en Supabase validando las 5 categorías, y las remotas se guardan en el caché local.
  */
 
 import { SupabaseService } from './supabaseClient';
@@ -33,10 +44,12 @@ export interface UserProgress {
   lastActiveAt: string;
 }
 
+export type ValidMemoryCategory = 'fact' | 'interest' | 'weakness' | 'goal' | 'preference';
+
 export interface UserMemoryItem {
   id?: number | string;
   userId: string;
-  category: 'fact' | 'interest' | 'weakness' | 'goal' | 'preference';
+  category: ValidMemoryCategory;
   keyPhrase: string;
   memoryValue: string;
   confidence: number;
@@ -47,6 +60,45 @@ const STORAGE_KEY_USER = 'mypolygloty_active_user';
 const STORAGE_KEY_PROGRESS = 'mypolygloty_user_progress';
 const STORAGE_KEY_LOCAL_USERS = 'mypolygloty_local_registered_users';
 const STORAGE_KEY_MEMORIES = 'mypolygloty_user_memories';
+
+/**
+ * Normaliza cualquier categoría de memoria a una de las 5 permitidas por el CHECK en PostgreSQL:
+ * 'fact', 'interest', 'weakness', 'goal', 'preference'
+ */
+export function normalizeMemoryCategory(rawCat: string): ValidMemoryCategory {
+  const norm = (rawCat || '').toLowerCase().trim();
+  switch (norm) {
+    case 'fact':
+    case 'personal':
+    case 'data':
+      return 'fact';
+    case 'interest':
+    case 'interests':
+    case 'hobby':
+    case 'hobbies':
+      return 'interest';
+    case 'weakness':
+    case 'correction':
+    case 'corrections':
+    case 'error':
+    case 'weaknesses':
+      return 'weakness';
+    case 'goal':
+    case 'goals':
+    case 'target':
+    case 'objective':
+      return 'goal';
+    case 'preference':
+    case 'preferences':
+    case 'taste':
+    case 'tastes':
+    case 'like':
+    case 'likes':
+      return 'preference';
+    default:
+      return 'fact';
+  }
+}
 
 export class AuthService {
   private static instance: AuthService | null = null;
@@ -66,7 +118,7 @@ export class AuthService {
   }
 
   /**
-   * Restaura la sesión del usuario guardada localmente o desde Supabase
+   * Restaura la sesión del usuario guardada localmente y enlaza los eventos de Supabase Auth
    */
   private restoreSession(): void {
     if (typeof window === 'undefined') return;
@@ -82,17 +134,16 @@ export class AuthService {
         this.currentProgress = JSON.parse(storedProgress);
       }
     } catch (err) {
-      console.warn('[AuthService] Error al restaurar sesión previa:', err);
+      console.warn('[AuthService] Error al restaurar sesión previa de localStorage:', err);
     }
 
-    // Escuchar eventos de sesión de Supabase Auth si está conectado
     const supabase = SupabaseService.getInstance();
-    const client = (supabase as unknown as { client: any }).client;
+    const client = supabase.client;
     if (client && client.auth) {
-      client.auth.onAuthStateChange(async (_event: string, session: any) => {
+      client.auth.onAuthStateChange(async (event, session) => {
         if (session && session.user) {
           await this.loadUserProfileFromSupabase(session.user.id, session.user.email);
-        } else if (_event === 'SIGNED_OUT') {
+        } else if (event === 'SIGNED_OUT') {
           this.currentUser = null;
           this.currentProgress = null;
           localStorage.removeItem(STORAGE_KEY_USER);
@@ -105,12 +156,22 @@ export class AuthService {
 
   /**
    * Registro de nuevo usuario (Sign Up)
+   * REGLAS:
+   * 1. Envía options.data = { full_name, target_lang, current_level }.
+   * 2. CERO inserts manuales a profiles o user_progress (el trigger on_auth_user_created los genera).
+   * 3. Maneja los dos casos: con sesión inmediata y sin sesión (confirmación por correo requerida).
    */
-  public async signUp(email: string, password: string, fullName: string): Promise<{ success: boolean; error?: string }> {
+  public async signUp(
+    email: string,
+    password: string,
+    fullName: string,
+    targetLang: 'en' | 'zh' = 'en',
+    currentLevel: 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2' = 'A1'
+  ): Promise<{ success: boolean; needsEmailConfirmation?: boolean; message?: string; error?: string }> {
     const cleanEmail = email.trim().toLowerCase();
     const cleanName = fullName.trim() || 'Estudiante';
     const supabase = SupabaseService.getInstance();
-    const client = (supabase as unknown as { client: any }).client;
+    const client = supabase.client;
 
     // 1. Intentar con Supabase Auth si está conectado
     if (client && supabase.isConnected()) {
@@ -119,7 +180,11 @@ export class AuthService {
           email: cleanEmail,
           password: password,
           options: {
-            data: { full_name: cleanName },
+            data: {
+              full_name: cleanName,
+              target_lang: targetLang,
+              current_level: currentLevel,
+            },
           },
         });
 
@@ -127,59 +192,32 @@ export class AuthService {
           return { success: false, error: error.message };
         }
 
-        const userId = data.user?.id || `user_${Date.now()}`;
-        const newProfile: UserProfile = {
-          id: userId,
-          email: cleanEmail,
-          fullName: cleanName,
-          targetLang: 'en',
-          currentLevel: 'A1',
-          createdAt: new Date().toISOString(),
-        };
+        // Caso B: Sin sesión inmediata (confirmación de email requerida en Supabase)
+        if (data.user && !data.session) {
+          console.info('[AuthService] Usuario creado. Confirmación de correo pendiente.');
+          // CERO escrituras a la base de datos hasta que haya sesión confirmada
+          return {
+            success: true,
+            needsEmailConfirmation: true,
+            message: 'Cuenta registrada. Revisa tu correo electrónico para confirmar tu cuenta antes de iniciar sesión.',
+          };
+        }
 
-        const initialProgress: UserProgress = {
-          userId: userId,
-          streakDays: 1,
-          totalXp: 50,
-          totalTurns: 0,
-          totalLessons: 0,
-          fluencyScore: 82,
-          vocabScore: 80,
-          grammarScore: 84,
-          lastActiveAt: new Date().toISOString(),
-        };
+        // Caso A: Con sesión inmediata (confirmación desactivada o automática)
+        if (data.session && data.user) {
+          // Breve respiro para que el trigger on_auth_user_created termine de asentar las filas
+          await new Promise((resolve) => setTimeout(resolve, 300));
+          await this.loadUserProfileFromSupabase(data.user.id, cleanEmail);
+          return { success: true, needsEmailConfirmation: false };
+        }
 
-        // Guardar perfil y progreso en Supabase
-        await client.from('profiles').upsert({
-          id: userId,
-          email: cleanEmail,
-          full_name: cleanName,
-          target_lang: 'en',
-          current_level: 'A1',
-          created_at: newProfile.createdAt,
-          updated_at: newProfile.createdAt,
-        });
-
-        await client.from('user_progress').upsert({
-          user_id: userId,
-          streak_days: 1,
-          total_xp: 50,
-          total_turns: 0,
-          total_lessons: 0,
-          fluency_score: 82,
-          vocab_score: 80,
-          grammar_score: 84,
-          last_active_at: initialProgress.lastActiveAt,
-        });
-
-        this.setActiveSession(newProfile, initialProgress);
         return { success: true };
       } catch (err: any) {
-        console.warn('[AuthService] Fallo en Supabase SignUp, usando modo local:', err);
+        console.warn('[AuthService] Fallo de red en Supabase SignUp, activando modo Local-First:', err);
       }
     }
 
-    // 2. Modo Local-First Resiliente (para pruebas offline o desarrollo)
+    // 2. Modo Local-First Resiliente (para testing offline o sin anon key)
     try {
       const usersRaw = localStorage.getItem(STORAGE_KEY_LOCAL_USERS) || '[]';
       const localUsers: Array<{ email: string; passwordHash: string; profile: UserProfile; progress: UserProgress }> = JSON.parse(usersRaw);
@@ -193,8 +231,8 @@ export class AuthService {
         id: userId,
         email: cleanEmail,
         fullName: cleanName,
-        targetLang: 'en',
-        currentLevel: 'A1',
+        targetLang: targetLang,
+        currentLevel: currentLevel,
         createdAt: new Date().toISOString(),
       };
 
@@ -212,14 +250,14 @@ export class AuthService {
 
       localUsers.push({
         email: cleanEmail,
-        passwordHash: btoa(password), // Codificación simple para modo local
+        passwordHash: btoa(password),
         profile: newProfile,
         progress: initialProgress,
       });
 
       localStorage.setItem(STORAGE_KEY_LOCAL_USERS, JSON.stringify(localUsers));
       this.setActiveSession(newProfile, initialProgress);
-      return { success: true };
+      return { success: true, needsEmailConfirmation: false };
     } catch (err: any) {
       return { success: false, error: err.message || 'Error al crear la cuenta localmente' };
     }
@@ -231,7 +269,7 @@ export class AuthService {
   public async signIn(email: string, password: string): Promise<{ success: boolean; error?: string }> {
     const cleanEmail = email.trim().toLowerCase();
     const supabase = SupabaseService.getInstance();
-    const client = (supabase as unknown as { client: any }).client;
+    const client = supabase.client;
 
     // 1. Intentar con Supabase Auth
     if (client && supabase.isConnected()) {
@@ -242,15 +280,17 @@ export class AuthService {
         });
 
         if (error) {
+          // No ocultar errores de autenticación legítimos
           return { success: false, error: error.message };
         }
 
-        if (data.user) {
+        if (data.session && data.user) {
           await this.loadUserProfileFromSupabase(data.user.id, data.user.email);
+          await this.syncLocalDataToCloud(data.user.id);
           return { success: true };
         }
       } catch (err: any) {
-        console.warn('[AuthService] Fallo en Supabase SignIn, revisando modo local:', err);
+        console.warn('[AuthService] Fallo de conectividad con Supabase SignIn, revisando modo local:', err);
       }
     }
 
@@ -264,7 +304,6 @@ export class AuthService {
         return { success: false, error: 'Credenciales inválidas. Verifica tu correo y contraseña.' };
       }
 
-      // Actualizar última actividad
       found.progress.lastActiveAt = new Date().toISOString();
       localStorage.setItem(STORAGE_KEY_LOCAL_USERS, JSON.stringify(localUsers));
 
@@ -276,24 +315,43 @@ export class AuthService {
   }
 
   /**
-   * Cargar perfil y progreso desde Supabase
+   * Cargar perfil y progreso desde Supabase (solo se ejecuta con sesión activa)
    */
   private async loadUserProfileFromSupabase(userId: string, email?: string): Promise<void> {
     const supabase = SupabaseService.getInstance();
-    const client = (supabase as unknown as { client: any }).client;
+    const client = supabase.client;
     if (!client) return;
 
     try {
-      const { data: profileData } = await client.from('profiles').select('*').eq('id', userId).single();
-      const { data: progressData } = await client.from('user_progress').select('*').eq('user_id', userId).single();
+      // 1. Cargar Perfil
+      const { data: profileData, error: profileErr } = await client
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle();
+
+      if (profileErr) {
+        console.warn('[AuthService] Error cargando perfil de Supabase:', profileErr.message);
+      }
+
+      // 2. Cargar Progreso
+      const { data: progressData, error: progressErr } = await client
+        .from('user_progress')
+        .select('*')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (progressErr) {
+        console.warn('[AuthService] Error cargando progreso de Supabase:', progressErr.message);
+      }
 
       const profile: UserProfile = profileData
         ? {
             id: profileData.id,
             email: profileData.email,
             fullName: profileData.full_name,
-            targetLang: profileData.target_lang,
-            currentLevel: profileData.current_level,
+            targetLang: profileData.target_lang || 'en',
+            currentLevel: profileData.current_level || 'A1',
             createdAt: profileData.created_at,
           }
         : {
@@ -308,14 +366,14 @@ export class AuthService {
       const progress: UserProgress = progressData
         ? {
             userId: progressData.user_id,
-            streakDays: progressData.streak_days,
-            totalXp: progressData.total_xp,
-            totalTurns: progressData.total_turns,
-            totalLessons: progressData.total_lessons,
-            fluencyScore: progressData.fluency_score,
-            vocabScore: progressData.vocab_score,
-            grammarScore: progressData.grammar_score,
-            lastActiveAt: progressData.last_active_at,
+            streakDays: progressData.streak_days || 1,
+            totalXp: progressData.total_xp || 0,
+            totalTurns: progressData.total_turns || 0,
+            totalLessons: progressData.total_lessons || 0,
+            fluencyScore: progressData.fluency_score || 80,
+            vocabScore: progressData.vocab_score || 78,
+            grammarScore: progressData.grammar_score || 82,
+            lastActiveAt: progressData.last_active_at || new Date().toISOString(),
           }
         : {
             userId: userId,
@@ -329,9 +387,95 @@ export class AuthService {
             lastActiveAt: new Date().toISOString(),
           };
 
+      // 3. Cargar Memorias desde Supabase
+      const { data: memoryRows } = await client
+        .from('user_memory')
+        .select('*')
+        .eq('user_id', userId);
+
+      if (memoryRows && memoryRows.length > 0) {
+        const cloudMemories: UserMemoryItem[] = memoryRows.map((r: any) => ({
+          id: r.id,
+          userId: r.user_id,
+          category: normalizeMemoryCategory(r.category),
+          keyPhrase: r.key_phrase,
+          memoryValue: r.memory_value,
+          confidence: Number(r.confidence || 0.9),
+          createdAt: r.created_at,
+        }));
+        localStorage.setItem(STORAGE_KEY_MEMORIES, JSON.stringify(cloudMemories));
+      }
+
       this.setActiveSession(profile, progress);
     } catch (err) {
-      console.warn('[AuthService] Error cargando perfil de Supabase:', err);
+      console.warn('[AuthService] Excepción al consultar datos en Supabase:', err);
+    }
+  }
+
+  /**
+   * Sincroniza datos locales pendientes hacia la nube según la regla:
+   * - Progreso: Max-Accumulative (el mayor valor prevalece).
+   * - Memoria: Unión aditiva deduplicada por key_phrase.
+   */
+  private async syncLocalDataToCloud(userId: string): Promise<void> {
+    const supabase = SupabaseService.getInstance();
+    const client = supabase.client;
+    if (!client) return;
+
+    try {
+      // 1. Sincronizar Progreso si hay datos locales superiores
+      const localProgRaw = localStorage.getItem(STORAGE_KEY_PROGRESS);
+      if (localProgRaw && this.currentProgress) {
+        const localProg: UserProgress = JSON.parse(localProgRaw);
+        const mergedStreak = Math.max(localProg.streakDays || 1, this.currentProgress.streakDays || 1);
+        const mergedXp = Math.max(localProg.totalXp || 0, this.currentProgress.totalXp || 0);
+        const mergedTurns = Math.max(localProg.totalTurns || 0, this.currentProgress.totalTurns || 0);
+        const mergedLessons = Math.max(localProg.totalLessons || 0, this.currentProgress.totalLessons || 0);
+
+        if (
+          mergedStreak > this.currentProgress.streakDays ||
+          mergedXp > this.currentProgress.totalXp ||
+          mergedTurns > this.currentProgress.totalTurns
+        ) {
+          this.currentProgress.streakDays = mergedStreak;
+          this.currentProgress.totalXp = mergedXp;
+          this.currentProgress.totalTurns = mergedTurns;
+          this.currentProgress.totalLessons = mergedLessons;
+
+          await client.from('user_progress').update({
+            streak_days: mergedStreak,
+            total_xp: mergedXp,
+            total_turns: mergedTurns,
+            total_lessons: mergedLessons,
+            last_active_at: new Date().toISOString(),
+          }).eq('user_id', userId);
+        }
+      }
+
+      // 2. Sincronizar Memorias locales que no existan en la nube
+      const rawMem = localStorage.getItem(STORAGE_KEY_MEMORIES) || '[]';
+      const localMems: UserMemoryItem[] = JSON.parse(rawMem);
+
+      const { data: cloudMemRows } = await client
+        .from('user_memory')
+        .select('key_phrase')
+        .eq('user_id', userId);
+
+      const cloudKeys = new Set((cloudMemRows || []).map((m: any) => m.key_phrase));
+
+      for (const m of localMems) {
+        if (!cloudKeys.has(m.keyPhrase)) {
+          await client.from('user_memory').insert({
+            user_id: userId,
+            category: normalizeMemoryCategory(m.category),
+            key_phrase: m.keyPhrase,
+            memory_value: m.memoryValue,
+            confidence: m.confidence || 0.9,
+          });
+        }
+      }
+    } catch (err) {
+      console.warn('[AuthService] Fallo no fatal en syncLocalDataToCloud:', err);
     }
   }
 
@@ -350,7 +494,7 @@ export class AuthService {
    */
   public async signOut(): Promise<void> {
     const supabase = SupabaseService.getInstance();
-    const client = (supabase as unknown as { client: any }).client;
+    const client = supabase.client;
 
     if (client && client.auth) {
       try {
@@ -427,11 +571,12 @@ export class AuthService {
 
     // Sincronizar en Supabase si está autenticado y en la nube
     const supabase = SupabaseService.getInstance();
-    const client = (supabase as unknown as { client: any }).client;
-    if (client && this.currentUser && !this.currentUser.id.startsWith('local_user_')) {
+    const client = supabase.client;
+    const userId = await supabase.getActiveUserId();
+
+    if (client && userId && this.currentUser && !this.currentUser.id.startsWith('local_user_')) {
       try {
-        await client.from('user_progress').upsert({
-          user_id: this.currentUser.id,
+        await client.from('user_progress').update({
           streak_days: this.currentProgress.streakDays,
           total_xp: this.currentProgress.totalXp,
           total_turns: this.currentProgress.totalTurns,
@@ -440,10 +585,10 @@ export class AuthService {
           vocab_score: this.currentProgress.vocabScore,
           grammar_score: this.currentProgress.grammarScore,
           last_active_at: this.currentProgress.lastActiveAt,
-        });
+        }).eq('user_id', userId);
 
         if (delta.level) {
-          await client.from('profiles').update({ current_level: delta.level }).eq('id', this.currentUser.id);
+          await client.from('profiles').update({ current_level: delta.level }).eq('id', userId);
         }
       } catch (err) {
         console.warn('[AuthService] Error sincronizando progreso con Supabase:', err);
@@ -452,12 +597,22 @@ export class AuthService {
   }
 
   /**
-   * Gestión de Memoria Continua del Tutor
+   * Gestión de Memoria Continua del Tutor (con validación de categoría)
    */
-  public async addMemory(item: Omit<UserMemoryItem, 'userId'>): Promise<void> {
+  public async addMemory(item: {
+    category: string;
+    keyPhrase: string;
+    memoryValue: string;
+    confidence: number;
+  }): Promise<void> {
     const userId = this.currentUser?.id || 'guest';
+    const safeCategory = normalizeMemoryCategory(item.category);
+
     const memoryItem: UserMemoryItem = {
-      ...item,
+      category: safeCategory,
+      keyPhrase: item.keyPhrase,
+      memoryValue: item.memoryValue,
+      confidence: item.confidence,
       userId,
       createdAt: new Date().toISOString(),
     };
@@ -467,7 +622,6 @@ export class AuthService {
       try {
         const raw = localStorage.getItem(STORAGE_KEY_MEMORIES) || '[]';
         const memories: UserMemoryItem[] = JSON.parse(raw);
-        // Evitar duplicados exactos de la misma clave
         const existingIdx = memories.findIndex((m) => m.userId === userId && m.keyPhrase === memoryItem.keyPhrase);
         if (existingIdx >= 0) {
           memories[existingIdx] = memoryItem;
@@ -478,14 +632,16 @@ export class AuthService {
       } catch (_) {}
     }
 
-    // 2. Sincronizar en Supabase si está conectado
+    // 2. Sincronizar en Supabase solo si hay sesión activa
     const supabase = SupabaseService.getInstance();
-    const client = (supabase as unknown as { client: any }).client;
-    if (client && this.currentUser && !this.currentUser.id.startsWith('local_user_')) {
+    const client = supabase.client;
+    const activeUid = await supabase.getActiveUserId();
+
+    if (client && activeUid && this.currentUser && !this.currentUser.id.startsWith('local_user_')) {
       try {
         await client.from('user_memory').insert({
-          user_id: userId,
-          category: memoryItem.category,
+          user_id: activeUid,
+          category: safeCategory,
           key_phrase: memoryItem.keyPhrase,
           memory_value: memoryItem.memoryValue,
           confidence: memoryItem.confidence,

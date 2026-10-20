@@ -1,18 +1,15 @@
 /**
  * Supabase Client & Cloud Persistence Service
- * MyPolyGloty OS - Cloud Sync & Database Layer
+ * MyPolyGloty OS - Cloud Sync & Database Layer (v2 Seguro)
  * 
  * Conecta con el proyecto Supabase: https://rgnkwfgeivgfvqwcyiow.supabase.co
- * Provee sincronización asíncrona bidireccional para:
- * - Diagnósticos CEFR (bandas A1-C2, métricas temporales, fricciones psicológicas)
- * - Mazo de Repetición Espaciada FSRS v4.5 (estabilidad, dificultad, intervalos)
- * - Evaluaciones fonéticas quirúrgicas
- * - Historial y telemetría de sesiones conversacionales
+ * RLS: Solo rol "authenticated". Cero llamadas para usuarios sin sesión (Local-First).
  * 
- * Si la clave no está configurada o la red está inactiva, almacena localmente de forma resiliente.
+ * Si no hay sesión activa o falta la clave anon, opera de forma 100% local en localStorage
+ * garantizando 0 llamadas a supabase.co/rest/v1 sin autenticación.
  */
 
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient, type Session } from '@supabase/supabase-js';
 import type { DiagnosticResult } from '../types/cefr';
 import type { FSRSCard } from './fsrsScheduler';
 import type { PhoneticAnalysisResult } from '../phonetics/PhoneticEngine';
@@ -22,9 +19,10 @@ const STORAGE_KEY_ANON = 'mypolygloty_supabase_anon_key';
 
 export class SupabaseService {
   private static instance: SupabaseService | null = null;
-  private client: SupabaseClient | null = null;
-  private url: string = import.meta.env.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL;
-  private anonKey: string = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+  public client: SupabaseClient | null = null;
+  private url: string = (import.meta as any).env?.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL;
+  private anonKey: string = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || '';
+  private cachedSession: Session | null = null;
 
   private constructor() {
     this.initClient();
@@ -49,15 +47,29 @@ export class SupabaseService {
           auth: {
             persistSession: true,
             autoRefreshToken: true,
+            detectSessionInUrl: true,
           },
         });
+
+        // Suscribirse a cambios de sesión para cachear estado localmente
+        this.client.auth.onAuthStateChange((_event, session) => {
+          this.cachedSession = session;
+        });
+
+        // Obtener sesión inicial si existe
+        this.client.auth.getSession().then(({ data }) => {
+          this.cachedSession = data.session;
+        }).catch(() => {
+          this.cachedSession = null;
+        });
+
         console.log('[SupabaseService] Cliente inicializado correctamente para', this.url);
       } catch (err) {
         console.warn('[SupabaseService] Error al crear cliente Supabase:', err);
         this.client = null;
       }
     } else {
-      console.info('[SupabaseService] Esperando VITE_SUPABASE_ANON_KEY para habilitar sincronización en la nube.');
+      console.info('[SupabaseService] Modo Local-First activo: esperando VITE_SUPABASE_ANON_KEY.');
     }
   }
 
@@ -82,19 +94,46 @@ export class SupabaseService {
   }
 
   /**
-   * Sincroniza el resultado del Diagnóstico CEFR con Supabase
+   * Verifica si existe una sesión activa autenticada en Supabase.
+   * REGLA RLS CRÍTICA: Si no hay sesión activa, NO debe realizarse ninguna petición REST a Supabase.
+   */
+  public async getActiveUserId(): Promise<string | null> {
+    if (!this.client || !this.isConnected()) return null;
+
+    if (this.cachedSession?.user?.id) {
+      return this.cachedSession.user.id;
+    }
+
+    try {
+      const { data } = await this.client.auth.getSession();
+      this.cachedSession = data.session;
+      return data.session?.user?.id || null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Sincroniza el resultado del Diagnóstico CEFR con Supabase solo si hay sesión activa
    */
   public async syncCefrDiagnostic(result: DiagnosticResult): Promise<boolean> {
-    if (!this.client) {
-      console.log('[SupabaseService] Modo local activo: Diagnóstico CEFR guardado en localStorage.');
+    const userId = await this.getActiveUserId();
+    if (!this.client || !userId) {
+      // Cero llamadas HTTP a Supabase sin sesión activa (Local-First)
+      console.log('[SupabaseService] Local-First: Diagnóstico CEFR conservado en localStorage (sin sesión activa).');
       return false;
     }
 
     try {
+      const globalId = typeof crypto !== 'undefined' && crypto.randomUUID
+        ? `diag_${crypto.randomUUID()}`
+        : `diag_${result.completedAt}_${Math.random().toString(36).substring(2, 8)}`;
+
       const { error } = await this.client
         .from('cefr_diagnostics')
         .upsert({
-          id: `diag_${result.completedAt}`,
+          id: globalId,
+          user_id: userId,
           band: result.band,
           score: result.score,
           vocabulary_score: result.subScores.range,
@@ -116,14 +155,19 @@ export class SupabaseService {
   }
 
   /**
-   * Sincroniza la baraja FSRS completa con Supabase
+   * Sincroniza la baraja FSRS completa con Supabase solo si hay sesión activa
    */
   public async syncFsrsCards(cards: FSRSCard[]): Promise<boolean> {
-    if (!this.client || cards.length === 0) return false;
+    const userId = await this.getActiveUserId();
+    if (!this.client || !userId || cards.length === 0) {
+      // Cero llamadas HTTP a Supabase sin sesión activa
+      return false;
+    }
 
     try {
       const rows = cards.map((c) => ({
         id: c.id,
+        user_id: userId,
         item: c.item,
         target_lang: c.targetLang,
         card_type: c.type,
@@ -151,16 +195,21 @@ export class SupabaseService {
   }
 
   /**
-   * Sincroniza evaluación fonética quirúrgica
+   * Sincroniza evaluación fonética quirúrgica solo si hay sesión activa
    */
   public async syncPhoneticEvaluation(
     targetWord: string,
     result: PhoneticAnalysisResult
   ): Promise<boolean> {
-    if (!this.client) return false;
+    const userId = await this.getActiveUserId();
+    if (!this.client || !userId) {
+      // Cero llamadas HTTP a Supabase sin sesión activa
+      return false;
+    }
 
     try {
       const { error } = await this.client.from('phonetic_evaluations').insert({
+        user_id: userId,
         target_word: result.targetWord || targetWord,
         canonical_ipa: result.phonemeScores.map((p) => p.phoneme).join(''),
         detected_ipa: result.failingPhoneme || 'ok',

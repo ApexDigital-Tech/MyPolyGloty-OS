@@ -28,7 +28,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
   const [memories, setMemories] = useState<UserMemoryItem[]>([]);
   const [newMemoryKey, setNewMemoryKey] = useState('');
   const [newMemoryValue, setNewMemoryValue] = useState('');
-  const [newMemoryCategory, setNewMemoryCategory] = useState<'interest' | 'fact' | 'weakness' | 'goal'>('interest');
+  const [newMemoryCategory, setNewMemoryCategory] = useState<'interest' | 'fact' | 'weakness' | 'goal' | 'preference'>('interest');
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState<string | null>(null);
 
@@ -261,6 +261,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
               <option value="goal">Meta</option>
               <option value="fact">Dato</option>
               <option value="weakness">Debilidad</option>
+              <option value="preference">Gusto / Preferencia</option>
             </select>
             <input
               type="text"

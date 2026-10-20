@@ -93,14 +93,11 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
 
     try {
       if (mode === 'register') {
-        const res = await authService.signUp(cleanEmail, password, fullName.trim());
+        const res = await authService.signUp(cleanEmail, password, fullName.trim(), targetLang, currentLevel);
         if (res.success) {
-          // Si el usuario seleccionó un idioma o nivel específico, actualizamos el perfil local
-          const currentUser = authService.getCurrentUser();
-          if (currentUser) {
-            currentUser.targetLang = targetLang;
-            currentUser.currentLevel = currentLevel;
-            localStorage.setItem('mypolygloty_active_user', JSON.stringify(currentUser));
+          if (res.needsEmailConfirmation) {
+            setSuccessMsg(res.message || 'Cuenta registrada. Revisa tu correo para confirmar tu cuenta antes de iniciar sesión.');
+            return;
           }
 
           setSuccessMsg('¡Cuenta creada exitosamente! Bienvenido a MyPolyGloty OS.');

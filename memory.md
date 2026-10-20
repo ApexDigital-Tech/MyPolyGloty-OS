@@ -1,17 +1,21 @@
 # Memory & System Status: MyPolyGloty OS
 
-**Fecha de última actualización:** 19 de octubre de 2026 (Sesión de Cierre de Sprint & Autenticación)
+**Fecha de última actualización:** 20 de octubre de 2026 (Alineación con Supabase Seguro v2 & Pruebas de Campo)
 
 ---
 
 ## 1. Resumen Ejecutivo y Estado Actual
-**MyPolyGloty OS** ha alcanzado el hito de **Producción y Pruebas de Campo**. El sistema cuenta con:
+**MyPolyGloty OS** ha alcanzado el hito de **Producción y Pruebas de Campo**.
+> [!IMPORTANT]
+> **Historial de Base de Datos**: Las tablas en la nube de Supabase se crearon y configuraron formalmente el **20 de octubre de 2026**. Con anterioridad a esta fecha, la aplicación operaba exclusivamente en **modo Local-First** (`localStorage`).
+
+El sistema cuenta con:
 1. Una interfaz conversacional inmersiva inspirada en Praktika (modo oscuro/claro, 100% responsiva para móvil y escritorio).
 2. Modo conversacional interactivo completo: chat de texto + micrófono STT en tiempo real, velocidad de voz calibrable (0.7x a 1.0x), subtítulos con micro-traducciones en español y sugerencias de respuesta opcionales y regenerables.
 3. Tutor IA pedagógico facilitador con calibración por niveles CEFR (A1 a C2).
-4. **Sistema de Autenticación, Registro y Perfil de Usuario** (Dual Engine: Supabase Cloud + Local-First resiliente).
+4. **Sistema de Autenticación y Pantallas Independientes** (`AuthScreen.tsx`): Vistas dedicadas de alta fidelidad para Iniciar Sesión y Crear Cuenta, con selección de idioma y nivel CEFR inicial.
 5. **Métricas de Avance y Progreso** (Racha de días 🔥, XP acumulado, turnos completados, desglose de fluidez, vocabulario y gramática).
-6. **Memoria Continua del Tutor** (`user_memory`): Detección automática de hechos e intereses del alumno y saludos dinámicos personalizados.
+6. **Memoria Continua del Tutor** (`user_memory`): Detección automática de hechos e intereses del alumno y saludos dinámicos personalizados con categorías validadas.
 7. Despliegue continuo en la nube (GitHub + Render + Supabase).
 
 ---
@@ -20,38 +24,66 @@
 
 | Componente | Servicio / Proveedor | Enlace / Identificador | Estado |
 |---|---|---|:---:|
-| **Repositorio Código** | GitHub | [ApexDigital-Tech/MyPolyGloty-OS](https://github.com/ApexDigital-Tech/MyPolyGloty-OS.git) | ✅ Activo (`main`) |
-| **Producción Web** | Render Cloud Hosting | `https://mypolygloty-os.onrender.com/` | ✅ Desplegado (Auto-Deploy) |
-| **Base de Datos & Auth** | Supabase Cloud | `https://rgnkwfgeivgfvqwcyiow.supabase.co` | ✅ Tablas y RLS listas |
+| **Repositorio Código** | GitHub | [ApexDigital-Tech/MyPolyGloty-OS](https://github.com/ApexDigital-Tech/MyPolyGloty-OS.git) | ✅ Activo (`main` / `fix/supabase-secure-alignment`) |
+| **Producción Web** | Render Cloud Hosting | `https://mypolygloty-os.onrender.com/` | ✅ Desplegado (Auto-Deploy en `main`) |
+| **Base de Datos & Auth** | Supabase Cloud | `https://rgnkwfgeivgfvqwcyiow.supabase.co` | ✅ Esquema v2 Seguro & RLS Activo (20-oct) |
 | **Desarrollo Local** | Vite Dev Server | `http://localhost:5173/` | ✅ Operativo |
 
 ---
 
-## 3. Arquitectura del Módulo de Autenticación y Progreso
+## 3. Arquitectura de Autenticación, RLS y Sincronización Segura
 
-### 3.1. Dual Engine Resiliente (`src/services/authService.ts`)
-- **Modo Supabase Cloud**: Si las credenciales y conectividad con Supabase están activas, utiliza `supabase.auth.signUp`, `supabase.auth.signInWithPassword`, y persistencia en tablas PostgreSQL remotas.
-- **Modo Local-First Fallback**: Si no hay conexión o se prueba sin variables de entorno cloud, opera de forma 100% autónoma en `localStorage`, garantizando que ningún usuario o tester quede bloqueado durante las pruebas de campo.
-- **Sincronización Transparente**: Al reconectarse a Supabase, sincroniza automáticamente el progreso y la memoria local con la base de datos remota.
+### 3.1. Modelo de Seguridad RLS v2 (Estricto Authenticated)
+A partir del 20 de octubre de 2026, las políticas públicas han sido eliminadas por completo:
+- **Rol `anon`**: Cero permisos de lectura o escritura en todas las tablas de Supabase.
+- **Rol `authenticated`**: Acceso restringido exclusivamente a las filas donde `auth.uid() = user_id` (o `id = auth.uid()` en `profiles`).
+- **Sin Sesión Activa**: La app no ejecuta ninguna llamada REST a `supabase.co/rest/v1`. Opera en modo Local-First y muestra el indicador correspondiente.
+- **Creación de Perfiles**: `profiles` **no tiene política INSERT para el cliente**. El perfil y el registro de progreso inicial son creados automáticamente por el trigger `on_auth_user_created` en la base de datos a partir de `raw_user_meta_data` (`full_name`, `target_lang`, `current_level`).
 
-### 3.2. Esquema de Base de Datos (`supabase/schema.sql`)
+### 3.2. Regla de Sincronización de Datos (Local <-> Cloud)
+Al iniciar sesión exitosamente con Supabase Auth, se aplica la siguiente política:
+1. **Perfil (`profiles`) — Cloud-Master**:
+   La nube es la fuente canónica de verdad. Se descarga el perfil remoto y se actualiza el estado local en `localStorage`.
+2. **Progreso (`user_progress`) — Max-Accumulative**:
+   Se fusiona el progreso offline con el remoto tomando el valor máximo:
+   `streak_days = max(local, remote)`
+   `total_xp = max(local, remote)`
+   `total_turns = max(local, remote)`
+   `total_lessons = max(local, remote)`
+   Si el estudiante acumuló avance sin conexión que supera a la nube, se ejecuta un `UPDATE` en Supabase para proteger su esfuerzo.
+3. **Memoria Continua (`user_memory`) — Aditiva Deduplicada**:
+   Las memorias locales que no existan en la nube (comparando por `key_phrase`) se insertan en Supabase con su `category` normalizada. Todas las memorias remotas se guardan en el caché local.
+
+### 3.3. Esquema Canónico de Base de Datos (`supabase/schema.sql`)
 1. **`public.profiles`**:
-   - `id UUID PRIMARY KEY REFERENCES auth.users(id)`
-   - `email`, `full_name`, `avatar_url`, `target_lang`, `current_level`, `created_at`, `updated_at`.
+   - `id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE`
+   - `email`, `full_name`, `avatar_url`, `target_lang`, `current_level` (CHECK `'A1'..'C2'`), `created_at`, `updated_at`.
+   - RLS: SELECT y UPDATE para `auth.uid() = id`. Sin INSERT (controlado por trigger).
 2. **`public.user_progress`**:
-   - `id UUID PRIMARY KEY`, `user_id UUID REFERENCES public.profiles(id)`
-   - `streak_days`, `total_xp`, `total_turns`, `total_lessons`, `fluency_score`, `vocab_score`, `grammar_score`, `last_active_at`.
+   - `user_id UUID PRIMARY KEY REFERENCES public.profiles(id) ON DELETE CASCADE`
+   - `streak_days`, `total_xp`, `total_turns`, `total_lessons`, `fluency_score`, `vocab_score`, `grammar_score`, `last_active_at`, `created_at`.
+   - RLS: SELECT, INSERT, UPDATE para `auth.uid() = user_id`.
 3. **`public.user_memory`**:
-   - `id UUID PRIMARY KEY`, `user_id UUID REFERENCES public.profiles(id)`
-   - `category` (`personal`, `preferences`, `corrections`, `interests`, `goals`).
-   - `key_phrase`, `memory_value`, `confidence` (FLOAT), `created_at`.
-4. **Seguridad**:
-   - Políticas RLS (`Row Level Security`) habilitadas para garantizar que cada estudiante solo pueda leer y escribir sus propios registros.
-
-### 3.3. Componentes de UI Integrados
-- **`AuthModal.tsx`**: Modal con pestañas de "Iniciar Sesión" y "Crear Cuenta", soporte de validación de contraseñas, feedback visual y píldora de estado de conexión (Supabase Cloud vs Local-First).
-- **`UserProfileModal.tsx`**: Dashboard del estudiante con resumen de racha 🔥, nivel CEFR, XP, métricas de fluidez/vocabulario/gramática, y un **Explorador de Memoria del Tutor** para visualizar, agregar y eliminar recuerdos que el tutor IA ha aprendido.
-- **`LessonHeader.tsx` & `App.tsx`**: Píldora de usuario en el navbar superior que muestra `👤 Nombre (Nivel)` o el botón `Entrar / Registro`.
+   - `id BIGSERIAL PRIMARY KEY`, `user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE`.
+   - `category TEXT CHECK (category IN ('fact', 'interest', 'weakness', 'goal', 'preference'))`.
+   - `key_phrase`, `memory_value`, `confidence NUMERIC`, `created_at`, `updated_at`.
+   - RLS: SELECT, INSERT, UPDATE, DELETE para `auth.uid() = user_id`.
+4. **`public.cefr_diagnostics`**:
+   - `id TEXT PRIMARY KEY` (generado con `crypto.randomUUID()`), `user_id UUID REFERENCES public.profiles(id)`.
+   - `band`, `score`, `vocabulary_score`, `grammar_score`, `fluency_score`, `temporal_wpm`, `psychological_frictions`, `turn_logs`.
+   - RLS: SELECT, INSERT, UPDATE para `auth.uid() = user_id`.
+5. **`public.fsrs_cards`**:
+   - `id TEXT PRIMARY KEY` (generado con `crypto.randomUUID()`), `user_id UUID REFERENCES public.profiles(id)`.
+   - `item`, `target_lang`, `card_type`, `ipa`, `context_sentence`, `due`, `stability`, `difficulty`, `reps`, `lapses`, `state`, `history`, `updated_at`.
+   - RLS: SELECT, INSERT, UPDATE, DELETE para `auth.uid() = user_id`.
+6. **`public.phonetic_evaluations`**:
+   - `id BIGSERIAL PRIMARY KEY`, `user_id UUID REFERENCES public.profiles(id)`.
+   - `target_word`, `canonical_ipa`, `detected_ipa`, `overall_score`, `formants`, `phonemes`, `created_at`.
+   - RLS: SELECT, INSERT para `auth.uid() = user_id`.
+7. **`public.conversation_sessions`**:
+   - `id TEXT PRIMARY KEY` (generado con `crypto.randomUUID()`), `user_id REFERENCES public.profiles(id)`.
+   - `scenario_title`, `cefr_level`, `messages`, `total_latency_p50`, `created_at`.
+   - RLS: SELECT, INSERT, UPDATE para `auth.uid() = user_id`.
 
 ---
 
@@ -62,14 +94,18 @@
 - **A2 - B2**: Escalamiento progresivo de complejidad gramatical y lexical.
 - **Alternativas de Respuesta**: Sugerencias tipo botón que el usuario puede pulsar para responder rápidamente o hacer clic en "🔄 Regenerar sugerencias" si desea otras alternativas.
 
-### 4.2. Extracción y Uso de Memoria
-- El tutor analiza las respuestas del estudiante en cada turno y extrae entidades clave:
-  - Nombres propios, bebidas preferidas (té, café), mascotas, ubicación, aficiones.
+### 4.2. Extracción y Normalización de Memoria
+- El tutor analiza las respuestas del estudiante y clasifica las entidades en las 5 categorías oficiales:
+  - `'fact'`: Nombre propio, procedencia, ocupación.
+  - `'interest'`: Aficiones, deportes, mascotas.
+  - `'preference'`: Bebidas preferidas (café, té), estilos de aprendizaje.
+  - `'weakness'`: Fonemas conflictivos o errores gramaticales recurrentes.
+  - `'goal'`: Bandas CEFR objetivo, preparación de entrevistas.
 - Al iniciar la lección, `getPersonalizedStarter()` recupera el nombre del usuario y sus memorias previas para saludarlo cordialmente y contextualizar la práctica.
 
 ---
 
-## 5. Historial de Herramientas y Entorno (Pre-requisitos REA & Sistema)
+## 5. Historial de Herramientas y Entorno
 
 | Componente | Versión / Detalle | Estado |
 |---|---|:---:|
@@ -82,27 +118,12 @@
 
 ---
 
-## 6. Próximos Pasos (Próxima Sesión)
-
-1. **Revisión de Pruebas de Campo**:
-   - Evaluar feedback del usuario tras probar los módulos en móvil y escritorio.
-   - Analizar comportamiento de la velocidad del audio y precisión de la traducción en A1/A2.
-2. **Calibración Fina**:
-   - Ajustar umbrales de confianza en la extracción de memoria automática.
-   - Reforzar el catálogo de ejercicios prácticos guiados para los niveles B1 a C1.
-3. **Validación de Supabase en Producción**:
-   - Confirmar sincronización en vivo de usuarios creados en Render con el panel de Supabase.
-
----
-
-## 7. Registro de Cambios Recientes (20 de octubre de 2026)
-- **Pantalla Independiente de Autenticación (`AuthScreen.tsx`)**:
-  - Separación de Login y Registro en pantallas independientes con diseño profesional split-screen (Showcase Pedagógico a la izquierda + Formulario de alta fidelidad a la derecha).
-  - Selector de idioma preferido (🇨🇳 Chino / 🇬🇧 Inglés) y nivel CEFR inicial (A1 a C2) en el registro.
-  - Botón para alternar visibilidad de contraseña (`Eye` / `EyeOff`), modo "Recordarme", y estado en vivo de Supabase Cloud vs Local-First.
-  - Enlaces directos para conmutar entre Login y Registro sin solapamientos.
-- **Corrección de Desalineación en Modales & Perfil**:
-  - Implementación de `.modal-backdrop-overlay` con `position: fixed`, desenfoque de fondo (`backdrop-filter: blur(10px)`), `z-index: 99999` y centrado flex absoluto tanto horizontal como vertical.
-  - Reestructuración de `.profile-modal-card` para garantizar alineación centrada y fluida en cualquier resolución sin recortes al pie de página.
-- **Acciones en Cabecera**:
-  - En lugar de un botón genérico "Entrar / Registro", la barra de navegación expone accesos directos dedicados: `Iniciar Sesión` y `Crear Cuenta`.
+## 6. Registro de Cambios Recientes (20 de octubre de 2026)
+- **Alineación con Supabase Seguro v2**:
+  - Creación de migración `supabase/migrations/20261020_0001_secure_schema_v2.sql` ("YA APLICADO en producción el 2026-10-20").
+  - `supabase/schema.sql` actualizado para reflejar RLS estricto (`authenticated` only) y trigger `on_auth_user_created`.
+  - `signUp` configurado para enviar `options.data = { full_name, target_lang, current_level }` eliminando cualquier inserción manual a `profiles` y `user_progress`.
+  - Soporte para confirmación de email: si no hay sesión inmediata, se emite aviso claro sin llamadas a la base de datos.
+  - Garantía de cero peticiones a `supabase.co/rest/v1` en modo sin sesión (Local-First).
+  - Normalización estricta de categorías de memoria a: `fact`, `interest`, `weakness`, `goal`, `preference`.
+  - Uso de `crypto.randomUUID()` para generación de IDs de tarjetas FSRS y diagnósticos CEFR.

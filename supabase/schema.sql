@@ -1,7 +1,8 @@
 -- ============================================================================
--- MyPolyGloty OS - Supabase Database Schema
+-- MyPolyGloty OS - Supabase Database Master Schema (v2 - Secure RLS)
 -- Project: https://rgnkwfgeivgfvqwcyiow.supabase.co
 -- Capa de Autenticación, Perfiles, Progreso y Memoria Continua del Tutor
+-- RLS: Exclusivo rol "authenticated". Cero acceso a rol "anon".
 -- ============================================================================
 
 -- 1. Perfiles de Usuario (Vinculado a auth.users de Supabase)
@@ -45,7 +46,7 @@ CREATE TABLE IF NOT EXISTS public.user_memory (
 -- 4. Diagnósticos CEFR en 6 bandas (Sprint 4)
 CREATE TABLE IF NOT EXISTS public.cefr_diagnostics (
   id TEXT PRIMARY KEY,
-  user_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
   band TEXT NOT NULL CHECK (band IN ('A1', 'A2', 'B1', 'B2', 'C1', 'C2')),
   score NUMERIC NOT NULL,
   vocabulary_score NUMERIC NOT NULL,
@@ -93,7 +94,7 @@ CREATE TABLE IF NOT EXISTS public.phonetic_evaluations (
 -- 7. Sesiones y Diálogos Conversacionales
 CREATE TABLE IF NOT EXISTS public.conversation_sessions (
   id TEXT PRIMARY KEY,
-  user_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+  user_id REFERENCES public.profiles(id) ON DELETE SET NULL,
   scenario_title TEXT NOT NULL,
   cefr_level TEXT NOT NULL,
   messages JSONB DEFAULT '[]'::jsonb,
@@ -110,22 +111,168 @@ ALTER TABLE public.fsrs_cards ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.phonetic_evaluations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.conversation_sessions ENABLE ROW LEVEL SECURITY;
 
--- Políticas de RLS para Profiles y Progress
-CREATE POLICY "Public profiles are readable by everyone" ON public.profiles FOR SELECT USING (true);
-CREATE POLICY "Users can insert their own profile" ON public.profiles FOR INSERT WITH CHECK (auth.uid() = id OR auth.role() = 'anon');
-CREATE POLICY "Users can update their own profile" ON public.profiles FOR UPDATE USING (auth.uid() = id OR auth.role() = 'anon');
+-- ============================================================================
+-- POLÍTICAS RLS SEGURAS (Solo rol "authenticated". Cero acceso para rol "anon")
+-- ============================================================================
 
-CREATE POLICY "Users can read own progress" ON public.user_progress FOR SELECT USING (auth.uid() = user_id OR auth.role() = 'anon');
-CREATE POLICY "Users can insert own progress" ON public.user_progress FOR INSERT WITH CHECK (auth.uid() = user_id OR auth.role() = 'anon');
-CREATE POLICY "Users can update own progress" ON public.user_progress FOR UPDATE USING (auth.uid() = user_id OR auth.role() = 'anon');
+-- 1. Profiles: Solo SELECT y UPDATE para el propio usuario (auth.uid() = id).
+-- NOTA CRÍTICA: NO hay política de INSERT para el cliente. El trigger crea el registro.
+CREATE POLICY "Users can view own profile"
+  ON public.profiles FOR SELECT
+  TO authenticated
+  USING (auth.uid() = id);
 
-CREATE POLICY "Users can read own memory" ON public.user_memory FOR SELECT USING (auth.uid() = user_id OR auth.role() = 'anon');
-CREATE POLICY "Users can insert own memory" ON public.user_memory FOR INSERT WITH CHECK (auth.uid() = user_id OR auth.role() = 'anon');
-CREATE POLICY "Users can update own memory" ON public.user_memory FOR UPDATE USING (auth.uid() = user_id OR auth.role() = 'anon');
-CREATE POLICY "Users can delete own memory" ON public.user_memory FOR DELETE USING (auth.uid() = user_id OR auth.role() = 'anon');
+CREATE POLICY "Users can update own profile"
+  ON public.profiles FOR UPDATE
+  TO authenticated
+  USING (auth.uid() = id)
+  WITH CHECK (auth.uid() = id);
 
--- Políticas para Diagnósticos, FSRS, Fonética y Sesiones
-CREATE POLICY "Allow public read-write for cefr_diagnostics" ON public.cefr_diagnostics FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow public read-write for fsrs_cards" ON public.fsrs_cards FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow public read-write for phonetic_evaluations" ON public.phonetic_evaluations FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow public read-write for conversation_sessions" ON public.conversation_sessions FOR ALL USING (true) WITH CHECK (true);
+-- 2. User Progress
+CREATE POLICY "Users can view own progress"
+  ON public.user_progress FOR SELECT
+  TO authenticated
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own progress"
+  ON public.user_progress FOR UPDATE
+  TO authenticated
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own progress"
+  ON public.user_progress FOR INSERT
+  TO authenticated
+  WITH CHECK (auth.uid() = user_id);
+
+-- 3. User Memory (solo las 5 categorías permitidas validadas por CHECK)
+CREATE POLICY "Users can view own memory"
+  ON public.user_memory FOR SELECT
+  TO authenticated
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own memory"
+  ON public.user_memory FOR INSERT
+  TO authenticated
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own memory"
+  ON public.user_memory FOR UPDATE
+  TO authenticated
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own memory"
+  ON public.user_memory FOR DELETE
+  TO authenticated
+  USING (auth.uid() = user_id);
+
+-- 4. CEFR Diagnostics
+CREATE POLICY "Users can view own diagnostics"
+  ON public.cefr_diagnostics FOR SELECT
+  TO authenticated
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own diagnostics"
+  ON public.cefr_diagnostics FOR INSERT
+  TO authenticated
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own diagnostics"
+  ON public.cefr_diagnostics FOR UPDATE
+  TO authenticated
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+-- 5. FSRS Cards
+CREATE POLICY "Users can view own fsrs_cards"
+  ON public.fsrs_cards FOR SELECT
+  TO authenticated
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own fsrs_cards"
+  ON public.fsrs_cards FOR INSERT
+  TO authenticated
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own fsrs_cards"
+  ON public.fsrs_cards FOR UPDATE
+  TO authenticated
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own fsrs_cards"
+  ON public.fsrs_cards FOR DELETE
+  TO authenticated
+  USING (auth.uid() = user_id);
+
+-- 6. Phonetic Evaluations
+CREATE POLICY "Users can view own phonetic evaluations"
+  ON public.phonetic_evaluations FOR SELECT
+  TO authenticated
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own phonetic evaluations"
+  ON public.phonetic_evaluations FOR INSERT
+  TO authenticated
+  WITH CHECK (auth.uid() = user_id);
+
+-- 7. Conversation Sessions
+CREATE POLICY "Users can view own conversation sessions"
+  ON public.conversation_sessions FOR SELECT
+  TO authenticated
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own conversation sessions"
+  ON public.conversation_sessions FOR INSERT
+  TO authenticated
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own conversation sessions"
+  ON public.conversation_sessions FOR UPDATE
+  TO authenticated
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+-- ============================================================================
+-- TRIGGER: Creación automática de profiles y user_progress al registrarse
+-- Lee de raw_user_meta_data: full_name, target_lang, current_level
+-- ============================================================================
+
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER AS $$
+DECLARE
+  v_full_name TEXT;
+  v_target_lang TEXT;
+  v_current_level TEXT;
+BEGIN
+  v_full_name := COALESCE(new.raw_user_meta_data->>'full_name', 'Estudiante');
+  v_target_lang := COALESCE(new.raw_user_meta_data->>'target_lang', 'en');
+  v_current_level := COALESCE(new.raw_user_meta_data->>'current_level', 'A1');
+  
+  IF v_current_level NOT IN ('A1', 'A2', 'B1', 'B2', 'C1', 'C2') THEN
+    v_current_level := 'A1';
+  END IF;
+
+  -- 1. Insertar perfil
+  INSERT INTO public.profiles (id, email, full_name, target_lang, current_level)
+  VALUES (new.id, new.email, v_full_name, v_target_lang, v_current_level)
+  ON CONFLICT (id) DO UPDATE
+    SET full_name = EXCLUDED.full_name,
+        target_lang = EXCLUDED.target_lang,
+        current_level = EXCLUDED.current_level,
+        updated_at = NOW();
+
+  -- 2. Insertar progreso inicial
+  INSERT INTO public.user_progress (user_id, streak_days, total_xp, total_turns, total_lessons, fluency_score, vocab_score, grammar_score)
+  VALUES (new.id, 1, 0, 0, 0, 80, 78, 82)
+  ON CONFLICT (user_id) DO NOTHING;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
