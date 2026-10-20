@@ -22,6 +22,9 @@ import {
   type LearningLevel,
   type TargetLanguage,
 } from './services/tutorFacilitatorService';
+import { AuthService, type UserProfile } from './services/authService';
+import { AuthModal } from './components/AuthModal';
+import { UserProfileModal } from './components/UserProfileModal';
 import {
   MessageSquare,
   Sparkles,
@@ -37,6 +40,8 @@ import {
   Flame,
   X,
   Volume2,
+  LogIn,
+  User,
 } from 'lucide-react';
 
 export const App: React.FC = () => {
@@ -76,6 +81,11 @@ export const App: React.FC = () => {
 
   // Facilitador Pedagógico, Nivel e Idioma
   const facilitator = useRef(TutorFacilitatorService.getInstance());
+  const authService = useRef(AuthService.getInstance());
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => authService.current.getCurrentUser());
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
+
   const [currentLevel, setCurrentLevel] = useState<LearningLevel>(() => facilitator.current.getLevel());
   const [currentLanguage, setCurrentLanguage] = useState<TargetLanguage>(() => facilitator.current.getLanguage());
   const [speechRate, setSpeechRate] = useState<number>(() =>
@@ -96,15 +106,25 @@ export const App: React.FC = () => {
   // Audio & Tutor state
   const [currentRms] = useState<number>(0);
   const [tutorStatus, setTutorStatus] = useState<'idle' | 'listening' | 'thinking' | 'speaking'>('idle');
-  const [messages, setMessages] = useState<DialogueMessage[]>([
-    {
-      id: 'init-1',
-      sender: 'tutor',
-      text: "Hello! I am Alistair. What is your name?",
-      translation: "¡Hola! Soy Alistair. ¿Cómo te llamas?",
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    },
-  ]);
+  const [messages, setMessages] = useState<DialogueMessage[]>(() => {
+    const starter = facilitator.current.getPersonalizedStarter();
+    return [
+      {
+        id: 'init-1',
+        sender: 'tutor',
+        text: starter.prompt,
+        translation: starter.translation,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      },
+    ];
+  });
+
+  // Escuchar cambios de autenticación
+  useEffect(() => {
+    return authService.current.onAuthStateChange((user) => {
+      setCurrentUser(user);
+    });
+  }, []);
 
   // Telemetry & Latency state
   const [currentBreakdown, setCurrentBreakdown] = useState<LatencyBreakdown | null>(null);
@@ -139,12 +159,13 @@ export const App: React.FC = () => {
       vocabScore: 78,
       grammarScore: 82,
     });
+    const starter = facilitator.current.getPersonalizedStarter(r);
     setMessages([
       {
         id: `level-init-${Date.now()}`,
         sender: 'tutor',
-        text: r.starterPrompt,
-        translation: r.starterTranslation,
+        text: starter.prompt,
+        translation: starter.translation,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       },
     ]);
@@ -164,12 +185,13 @@ export const App: React.FC = () => {
       vocabScore: 78,
       grammarScore: 82,
     });
+    const starter = facilitator.current.getPersonalizedStarter(r);
     setMessages([
       {
         id: `lang-init-${Date.now()}`,
         sender: 'tutor',
-        text: r.starterPrompt,
-        translation: r.starterTranslation,
+        text: starter.prompt,
+        translation: starter.translation,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       },
     ]);
@@ -188,12 +210,13 @@ export const App: React.FC = () => {
       vocabScore: 80,
       grammarScore: 85,
     });
+    const starter = facilitator.current.getPersonalizedStarter(r);
     setMessages([
       {
         id: `routine-init-${Date.now()}`,
         sender: 'tutor',
-        text: r.starterPrompt,
-        translation: r.starterTranslation,
+        text: starter.prompt,
+        translation: starter.translation,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       },
     ]);
@@ -233,6 +256,16 @@ export const App: React.FC = () => {
       // Generar respuesta pedagógica facilitada y traducción
       const facilitated = facilitator.current.generateFacilitatedResponse(userText);
       setSessionStats(facilitated.progress);
+
+      // Registrar avance y memoria en la base de datos de usuario
+      authService.current.recordProgress({
+        turnsCompleted: 1,
+        xpEarned: 15,
+        fluencyScore: facilitated.progress.fluencyScore,
+        vocabScore: facilitated.progress.vocabScore,
+        grammarScore: facilitated.progress.grammarScore,
+        level: currentLevel,
+      });
 
       const userTranslation = facilitator.current.getTranslation(userText);
 
@@ -460,8 +493,32 @@ export const App: React.FC = () => {
           </button>
         </nav>
 
-        {/* Acciones de Cabecera: Modo Claro/Oscuro, Telemetría, BYOK */}
+        {/* Acciones de Cabecera: Usuario, Modo Claro/Oscuro, Telemetría, BYOK */}
         <div className="navbar-actions-section">
+          {/* Autenticación y Perfil de Usuario */}
+          {currentUser ? (
+            <button
+              className="btn-user-profile-pill"
+              onClick={() => setIsProfileModalOpen(true)}
+              title={`Perfil: ${currentUser.fullName} (${currentUser.email}) - Ver avance y memoria`}
+            >
+              <div className="user-avatar-mini">
+                <User size={13} />
+              </div>
+              <span className="user-name-text">{currentUser.fullName.split(' ')[0]}</span>
+              <span className="user-level-tag">{currentUser.currentLevel}</span>
+            </button>
+          ) : (
+            <button
+              className="btn-login-trigger"
+              onClick={() => setIsAuthModalOpen(true)}
+              title="Iniciar sesión o crear cuenta para guardar tu avance y memoria del tutor"
+            >
+              <LogIn size={15} />
+              <span className="login-btn-text">Entrar / Registro</span>
+            </button>
+          )}
+
           {/* Toggle Modo Claro / Oscuro */}
           <button
             className="btn-theme-toggle"
@@ -667,6 +724,25 @@ export const App: React.FC = () => {
       <OfflineStatusModal
         isOpen={isOfflineModalOpen}
         onClose={() => setIsOfflineModalOpen(false)}
+      />
+
+      {/* Modales de Autenticación, Registro y Perfil */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        onAuthSuccess={() => {
+          setIsAuthModalOpen(false);
+          setIsProfileModalOpen(true);
+        }}
+      />
+
+      <UserProfileModal
+        isOpen={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
+        onLogout={() => {
+          authService.current.signOut();
+          setIsProfileModalOpen(false);
+        }}
       />
     </div>
   );

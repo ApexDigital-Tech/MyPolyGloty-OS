@@ -11,6 +11,8 @@
  * 6. Medición evaluada de progreso y racha
  */
 
+import { AuthService } from './authService';
+
 export type TargetLanguage = 'en' | 'zh';
 export type LearningLevel = 'A1' | 'A2' | 'B1' | 'B2' | 'C1';
 
@@ -206,6 +208,32 @@ export class TutorFacilitatorService {
   }
 
   /**
+   * Genera saludo personalizado usando la memoria del estudiante si está registrado
+   */
+  public getPersonalizedStarter(routine: LearningRoutine = this.currentRoutine): { prompt: string; translation: string } {
+    const user = AuthService.getInstance().getCurrentUser();
+    if (user && user.fullName && user.fullName !== 'Estudiante') {
+      const firstName = user.fullName.split(' ')[0];
+      if (routine.language === 'zh') {
+        return {
+          prompt: `你好 ${firstName}！很高兴再次见到你。你今天想练习什么？(Nǐ hǎo ${firstName}! Hěn gāoxìng zàicì jiàn dào nǐ. Nǐ jīntiān xiǎng liànxí shénme?)`,
+          translation: `¡Hola ${firstName}! Qué gusto verte de nuevo. ¿Qué te gustaría practicar hoy?`,
+        };
+      }
+      if (routine.level === 'A1') {
+        return {
+          prompt: `Hello ${firstName}! Good to see you again. How are you today?`,
+          translation: `¡Hola ${firstName}! Qué bueno verte de nuevo. ¿Cómo estás hoy?`,
+        };
+      }
+    }
+    return {
+      prompt: routine.starterPrompt,
+      translation: routine.starterTranslation,
+    };
+  }
+
+  /**
    * Alternativas de respuestas regenerables según nivel, idioma y batch
    */
   public getAlternativeSuggestions(
@@ -309,6 +337,26 @@ export class TutorFacilitatorService {
     this.turnsCompleted++;
     const lower = userText.toLowerCase().trim();
     const isZh = this.currentLanguage === 'zh';
+    // Extracción continua de memoria del estudiante
+    const auth = AuthService.getInstance();
+    if (lower.includes('my name is')) {
+      const match = userText.match(/my name is ([a-zA-Záéíóúñ]+)/i);
+      if (match) {
+        auth.addMemory({ category: 'fact', keyPhrase: 'Nombre', memoryValue: match[1], confidence: 1.0 });
+      }
+    }
+    if (lower.includes('coffee')) {
+      auth.addMemory({ category: 'interest', keyPhrase: 'Bebida favorita', memoryValue: 'Café', confidence: 0.95 });
+    }
+    if (lower.includes('tea')) {
+      auth.addMemory({ category: 'interest', keyPhrase: 'Bebida favorita', memoryValue: 'Té', confidence: 0.95 });
+    }
+    if (lower.includes('dog')) {
+      auth.addMemory({ category: 'interest', keyPhrase: 'Mascota', memoryValue: 'Perro', confidence: 0.95 });
+    }
+    if (lower.includes('cat')) {
+      auth.addMemory({ category: 'interest', keyPhrase: 'Mascota', memoryValue: 'Gato', confidence: 0.95 });
+    }
 
     // Detección de errores gramaticales comunes para feedback constructivo
     let grammarTip: FacilitatedTurnResponse['grammarTip'];
